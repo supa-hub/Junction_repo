@@ -1,0 +1,5 @@
+- User profiles that are created on per-user basis. A classroom is created for the students, where they participate in a game. The classroom is prepared by a teacher with the basic information about the classroom like location, monthly income. 
+
+- A game is designed to last around 45 minutes, where users receive lifelike situations that they answer in natural language with a response to the stiuation, that affect their financial situation, health, happiness etc. After a game the teacher is given an analysis of the whole classrooms financial literacy to give guidance to the whole classroom about their results in realtime, and guide them on their weakpoints. The players see a leaderboard to compare each other to their peers. Each user can also see their individual weakpoints in their financial literacy. These games can also be played multiple times during a students occupancy in high school, allowing information about the classrooms development in their financial literacy, and users can see their individual progress.
+
+- 
