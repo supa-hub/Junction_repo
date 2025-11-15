@@ -7,3 +7,5 @@
 - Players will have visible stats like wealth, health, happiness. There are also hidden properties like habits and longterm effects of decisions, and items that have a chance to break.
 
 - The core scenarios have to be completed and the app will recognize slower players by following how many scenarios they complete per minute, and the core scenarios will be dynamically offered to make sure all users complete them by the end of the game.
+
+- Will use the OPO opetussuunnitelma to give teaching recommendations for future lessons. AI will generate a PDF report of the whole simulation for analysis by the school system for future improvements.
