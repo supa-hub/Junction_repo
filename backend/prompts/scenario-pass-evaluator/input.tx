@@ -1,0 +1,5 @@
+{
+  "scenario": "string",
+  "userMessageHistory": ["string", "string", "..."],
+  "modelMessageHistory": ["string", "string", "..."]
+}
