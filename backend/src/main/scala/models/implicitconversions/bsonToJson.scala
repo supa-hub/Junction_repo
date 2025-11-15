@@ -9,7 +9,12 @@ given Conversion[StudentStatsMongo, StudentStats] with
     wealth = x.wealth,
     health = x.health,
     happiness = x.happiness,
-    scenariosDone = x.scenariosDone
+    riskTaking = x.riskTaking,
+    overTrusting = x.overTrusting,
+    laziness = x.laziness,
+    impulsiveness = x.impulsiveness,
+    scenariosDone = x.scenariosDone,
+    longTermEffects = x.longTermEffects
   )
 
 given Conversion[StudentHabitsMongo, StudentHabits] with
@@ -32,6 +37,12 @@ given Conversion[SessionMongo, Session] with
     sessionName = x.sessionName,
     sessionJoinCode = x.sessionJoinCode,
     students = x.students.map(identity)
+  )
+
+given Conversion[ProfessorUserMongo, ProfessorUser] with
+  override def apply(x: ProfessorUserMongo): ProfessorUser = ProfessorUser(
+    email = x.email,
+    password = x.password
   )
 
 given Conversion[List[ProfessorUserMongo], ProfessorUser] with

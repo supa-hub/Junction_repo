@@ -30,5 +30,7 @@ lazy val root = (project in file("."))
     libraryDependencies += "io.circe" %% "circe-generic" % "0.14.14",
 
     libraryDependencies += "com.github.jwt-scala" %% "jwt-circe" % "11.0.3",
-    libraryDependencies += "com.github.jwt-scala" %% "jwt-play" % "11.0.3"
+    libraryDependencies += "com.github.jwt-scala" %% "jwt-play" % "11.0.3",
+
+    libraryDependencies += "com.google.adk" % "google-adk" % "0.3.0"
   )

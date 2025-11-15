@@ -11,7 +11,12 @@ given Conversion[StudentStats, StudentStatsMongo] with
     wealth = x.wealth,
     health = x.health,
     happiness = x.happiness,
-    scenariosDone = x.scenariosDone
+    riskTaking = x.riskTaking,
+    overTrusting = x.overTrusting,
+    laziness = x.laziness,
+    impulsiveness = x.impulsiveness,
+    scenariosDone = x.scenariosDone,
+    longTermEffects = x.longTermEffects
   )
 
 given Conversion[StudentHabits, StudentHabitsMongo] with

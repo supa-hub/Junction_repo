@@ -10,7 +10,14 @@ final case class Session(
 
 final case class SessionPayload(
   email: String,
-  sessionName: String
+  sessionName: String,
+  sessionLocation: String
+) derives ReadWriter
+
+final case class CreateTeacherSessionPayload(
+  sessionName: String,
+  location: String,
+  monthlyIncome: models.Number
 ) derives ReadWriter
 
 final case class LoginPayload(
@@ -18,11 +25,27 @@ final case class LoginPayload(
   password: String
 ) derives ReadWriter
 
+final case class JoinSessionPayload(
+  userName: String
+) derives ReadWriter
+
+final case class PromptMessagePayload(
+  studentId: String,
+  message: String,
+  scenarioId: String,
+  timestamp: String
+) derives ReadWriter
+
 final case class StudentStats(
   wealth: models.Number,
   health: models.Number,
   happiness: models.Number,
+  riskTaking: models.Number,
+  overTrusting: models.Number,
+  laziness: models.Number,
+  impulsiveness: models.Number,
   scenariosDone: List[String],
+  longTermEffects: List[String]
 ) derives ReadWriter
 
 final case class StudentHabits(
@@ -55,8 +78,14 @@ package circecoders:
   given sessionDecoder: Decoder[Session] = deriveDecoder[Session]
   given sessionPayloadEncoder: Encoder[SessionPayload] = deriveEncoder[SessionPayload]
   given sessionPayloadDecoder: Decoder[SessionPayload] = deriveDecoder[SessionPayload]
+  given createTeacherSessionEncoder: Encoder[CreateTeacherSessionPayload] = deriveEncoder[CreateTeacherSessionPayload]
+  given createTeacherSessionDecoder: Decoder[CreateTeacherSessionPayload] = deriveDecoder[CreateTeacherSessionPayload]
   given loginPayloadEncoder: Encoder[LoginPayload] = deriveEncoder[LoginPayload]
   given loginPayloadDecoder: Decoder[LoginPayload] = deriveDecoder[LoginPayload]
+  given joinSessionEncoder: Encoder[JoinSessionPayload] = deriveEncoder[JoinSessionPayload]
+  given joinSessionDecoder: Decoder[JoinSessionPayload] = deriveDecoder[JoinSessionPayload]
+  given promptMessageEncoder: Encoder[PromptMessagePayload] = deriveEncoder[PromptMessagePayload]
+  given promptMessageDecoder: Decoder[PromptMessagePayload] = deriveDecoder[PromptMessagePayload]
   given studentStatsEncoder: Encoder[StudentStats] = deriveEncoder[StudentStats]
   given studentStatsDecoder: Decoder[StudentStats] = deriveDecoder[StudentStats]
   given studentHabitsEncoder: Encoder[StudentHabits] = deriveEncoder[StudentHabits]
@@ -73,7 +102,10 @@ package http4sentities:
   import org.http4s.EntityDecoder
   import org.http4s.circe.jsonOf
   given sessionPayloadEntity: EntityDecoder[IO, SessionPayload] = jsonOf[IO, SessionPayload]
+  given createSessionEntity: EntityDecoder[IO, CreateTeacherSessionPayload] = jsonOf[IO, CreateTeacherSessionPayload]
   given loginPayloadEntity: EntityDecoder[IO, LoginPayload] = jsonOf[IO, LoginPayload]
+  given joinSessionEntity: EntityDecoder[IO, JoinSessionPayload] = jsonOf[IO, JoinSessionPayload]
+  given promptMessageEntity: EntityDecoder[IO, PromptMessagePayload] = jsonOf[IO, PromptMessagePayload]
   given studentStatsEntity: EntityDecoder[IO, StudentStats] = jsonOf[IO, StudentStats]
   given studentHabitsEntity: EntityDecoder[IO, StudentHabits] = jsonOf[IO, StudentHabits]
   given studentUserEntity: EntityDecoder[IO, StudentUser] = jsonOf[IO, StudentUser]

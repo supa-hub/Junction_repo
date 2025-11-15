@@ -10,35 +10,46 @@ import mongo4cats.bson.BsonValueEncoder
 import scala.util.Random
 
 
+enum SessionStatus(val apiValue: String):
+  case Waiting extends SessionStatus("waiting_for_start")
+  case InProgress extends SessionStatus("in_progress")
+  case Completed extends SessionStatus("completed")
+end SessionStatus
+
+
+final case class HistoryRun(
+  runId: String,
+  medianWealth: models.Number,
+  medianHabits: Map[String, models.Number]
+)
+
 final case class SessionMongo(
   _id: ObjectId,
   sessionName: String,
   sessionJoinCode: String,
-  students: List[StudentUserMongo]
+  location: String,
+  monthlyIncome: models.Number,
+  students: List[StudentUserMongo],
+  status: SessionStatus,
+  startedAt: Option[String],
+  scenarioCompletions: Map[String, Int],
+  historyRuns: List[HistoryRun]
 )
 
-object SessionMongo:
-  def generate(name: String, joinCode: String): SessionMongo =
-    SessionMongo(
-      _id = ObjectId.gen,
-      sessionName = name,
-      sessionJoinCode = joinCode,
-      students = List()
-    )
-
-  def generateCode: String =
-    Random
-      .alphanumeric
-      .take(6)
-      .mkString
-end SessionMongo
+final case class ScenarioTemplate(key: String, title: String, narrative: String)
+final case class ScenarioState(id: String, template: ScenarioTemplate, turnsTaken: Int)
 
 final case class StudentStatsMongo(
   _id: ObjectId,
   wealth: models.Number,
   health: models.Number,
   happiness: models.Number,
+  riskTaking: models.Number,
+  overTrusting: models.Number,
+  laziness: models.Number,
+  impulsiveness: models.Number,
   scenariosDone: List[String],
+  longTermEffects: List[String]
 )
 
 final case class StudentHabitsMongo(
@@ -52,12 +63,18 @@ final case class StudentHabitsMongo(
 final case class StudentUserMongo(
   _id: ObjectId = ObjectId.gen,
   userName: String,
+  currentScenario: Option[ScenarioState] = None,
   stats: StudentStatsMongo = StudentStatsMongo(
     _id = ObjectId.gen,
-    wealth = 0.0,
-    health = 0.0,
-    happiness = 0.0,
-    scenariosDone = List()
+    wealth = 0,
+    health = 0,
+    happiness = 0,
+    riskTaking = 0,
+    overTrusting = 0,
+    laziness = 0,
+    impulsiveness = 0,
+    scenariosDone = List(),
+    longTermEffects = List()
   ),
   habits: StudentHabitsMongo = StudentHabitsMongo(
     _id = ObjectId.gen,
@@ -90,6 +107,28 @@ final case class ProfessorUserMongo(
   email: String,
   password: String
 )
+
+object SessionMongo:
+  def generate(name: String, joinCode: String, location: String): SessionMongo =
+    SessionMongo(
+      _id = ObjectId.gen,
+      sessionName = name,
+      sessionJoinCode = joinCode,
+      students = List(),
+      status = SessionStatus.Waiting,
+      startedAt = None,
+      scenarioCompletions = Map.empty,
+      historyRuns = List(),
+      location = location,
+      monthlyIncome = 0.0
+    )
+
+  def generateCode: String =
+    Random
+      .alphanumeric
+      .take(6)
+      .mkString
+end SessionMongo
 
 
 package circecoders:

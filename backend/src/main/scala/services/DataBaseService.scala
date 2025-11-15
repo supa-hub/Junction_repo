@@ -20,7 +20,7 @@ import scala.jdk.CollectionConverters.*
 object DataBaseService:
   // indexes to use in the compoundIndexes. The compoundIndex is used
   // to identify a users unique sessions
-  private val sessionField = "sessions"
+  private val sessionField = "session"
   private val userCompoundIndex = Indexes.ascending("email")
   private val sessionIndex = Index.ascending("sessionName")
   private val sessionCodeIndex = Index.ascending("sessionJoinCode")
@@ -193,11 +193,20 @@ object DataBaseService:
       .attempt
 
 
-  def addSession[A](email: String, aSessionName: String)(using Conversion[A, SessionMongo]): IO[Either[Throwable, Option[String]]] =
+  /**
+   * Creates a new session
+   * @param email
+   * @param aSessionName
+   * @param location
+   * @param x$4
+   * @tparam A
+   * @return
+   */
+  def addSession[A](email: String, aSessionName: String, location: String)(using Conversion[A, SessionMongo]): IO[Either[Throwable, Option[String]]] =
     val filter = userFilter(email)
 
     // find a session join code that isn't used yet
-    val sessionCode = fs2.Stream.eval(
+    val sessionCode = fs2.Stream.repeatEval(
       professorSessionCollection
         .map(coll =>
           val code = SessionMongo.generateCode
@@ -205,7 +214,7 @@ object DataBaseService:
         )
         .flatMap((code, res) => (IO.pure(code), res.first).parTupled)
       )
-      .dropWhile(_._2.isEmpty)
+      .dropWhile(_._2.nonEmpty)
       .head
       .compile
       .toList
@@ -215,7 +224,7 @@ object DataBaseService:
     (sessionCode, professorSessionCollection)
       .parTupled
       .flatMap((code, collection) =>
-        val data = SessionMongo.generate(aSessionName, code)
+        val data = SessionMongo.generate(aSessionName, code, location)
         collection.insertOne(ProfessorSessionMongo.generate(email, data))
       )
       .map(res => Option(res.getInsertedId))
