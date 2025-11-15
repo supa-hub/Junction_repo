@@ -1,0 +1,74 @@
+input.txt:
+
+You are now generating exactly ONE continuation for a single student, following your system instructions.
+
+Below is this student’s current in-game state in JSON format. This content is INTERNAL ONLY and MUST NOT be revealed directly to the student in any form.
+
+[STUDENT_STATE_JSON]
+{
+  "student_id": "optional-string-id",
+  "location_city": "Helsinki",
+  "monthly_income_eur": 600,
+  "wealth_score": 1400,
+  "happiness_score_percent": 60,
+  "health_score_percent": 80,
+  "habit_scores": {
+    "risk_taking": 8,
+    "laziness": 3,
+    "impulsiveness": 7
+  },
+  "long_term_effects": [
+    "the student shoplifted groceries but has not yet faced consequences"
+  ],
+  "completed_scenarios": [
+    "ID1",
+    "ID2",
+    "ID3"
+  ],
+  "student_language": "fi"   // or "en"; optional, but if present it indicates the student's preferred language
+}
+
+[SCENARIO_CONTEXT]
+A block of text describing the current situation so far, exactly as the student has seen it. This is the scenario text that has already been presented to the student in their language.
+
+[STUDENT_ANSWER]
+The student’s latest in-character message describing what they think, say, decide, or do in response to the situation. For example: “Menen googlaamaan onko tämä pikavippi huijaus vai ei” or “I decide to take the cheaper room and skip the gym membership.”
+
+LANGUAGE
+- If the field "student_language" is present and set to "fi", write the continuation in Finnish.
+- If it is present and set to "en", write the continuation in English.
+- If the field is missing, infer the language from [SCENARIO_CONTEXT] or [STUDENT_ANSWER]; if you cannot infer, default to Finnish.
+
+TASK
+1) Carefully read:
+   - The internal JSON state.
+   - The [SCENARIO_CONTEXT] describing the situation so far.
+   - The [STUDENT_ANSWER] describing what the student now does or says.
+
+2) Determine what the student’s main action or stance is, including whether they are trying to “google” or otherwise look something up online.
+
+3) If they are clearly searching online (for example, they say they google, check Kela’s site, read reviews, or look up whether something is a scam), then first use the available RAG tool that queries realistic public information. In your tool call, focus on:
+   - The specific topic, product, or message the student is investigating.
+   - At least one financial literacy topic suitable for a Finnish university student in or near Helsinki (for example, small loans, housing allowance, subscription contracts, consumer protection, typical scam patterns).
+
+4) Then, based on:
+   - The internal JSON state.
+   - The existing situation in [SCENARIO_CONTEXT].
+   - The content of [STUDENT_ANSWER].
+   - Any relevant information retrieved via the tool (if used).
+
+   create exactly ONE realistic continuation that:
+   - Respects the student’s declared action or decision.
+   - Reflects their current situation (wealth, happiness, health, monthly income, and long-term effects) through tone, pressures, and available options without exposing any internal numbers or labels.
+   - Uses their habits (especially clearly high or low scores) to shape temptations, risks, or challenges in the consequences you describe.
+   - Incorporates, when appropriate, concise and believable information that the student could plausibly find online, written as something they read or realise in the situation.
+   - Leaves them facing at least one meaningful financial decision or trade-off that remains unresolved.
+
+CONSTRAINTS
+- Do NOT expose or mention:
+  - Any numeric scores or percentages.
+  - Any internal field names from the JSON.
+  - Any mention of “game”, “scenario”, “profile”, “stats”, “scores”, “long-term effects”, “completed_scenarios”, or similar.
+- Present the situation as if it is happening in real life to a Finnish student starting university in or near Helsinki.
+- Do NOT summarise or repeat [SCENARIO_CONTEXT] or [STUDENT_ANSWER] in a meta way. Instead, smoothly continue the story from where they left off.
+- Output only the final continuation text, in the language determined by the LANGUAGE rules above, as continuous prose, with no headings or metadata.
