@@ -22,9 +22,10 @@ import org.http4s.dsl.io.*
 object JsonRoutes:
   val route = HttpRoutes.of[IO] {
     case req @ POST -> Root / "api" / "newSessionData" =>
-      req.attemptAs[SessionPayload]
+      req
+        .attemptAs[SessionPayload]
         .biflatMap[ErrorResponse, SuccessfulResponse](
-          _ => EitherT.leftT(ErrorResponse("Received data could not be decoded")),
+          err => EitherT.leftT(ErrorResponse(s"Received data could not be decoded: ${err.getMessage}")),
           payload => EitherT(createNewSession(payload))
         )
         .foldF(

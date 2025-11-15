@@ -85,7 +85,7 @@ object DataBaseService:
 
     val addressString = if settings.isSRV
       then s"${settings.clusterName.getOrElse("")}.mongodb.net"
-      else "localhost:27017"
+      else "localhost:28017"
 
     s"mongodb${srvString}://${loginString}${addressString}/?retryWrites=true&w=majority"
 
