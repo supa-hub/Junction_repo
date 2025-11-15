@@ -39,6 +39,9 @@ Below is this student’s current in-game state in JSON format. This content is 
 [STUDENT_ANSWER]
 "The latest message goes here"
 
+[PASS EVALUATOR REASONING]
+"Reasoning goes here"
+
 LANGUAGE
 - If the field "student_language" is present and set to "fi", write the continuation in Finnish.
 - If it is present and set to "en", write the continuation in English.
