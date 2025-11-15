@@ -10,7 +10,8 @@ final case class Session(
 
 final case class SessionPayload(
   email: String,
-  sessionName: String
+  sessionName: String,
+  sessionLocation: String
 ) derives ReadWriter
 
 final case class CreateTeacherSessionPayload(

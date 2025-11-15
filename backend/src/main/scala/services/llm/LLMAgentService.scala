@@ -188,7 +188,7 @@ object LLMAgentService:
       )
 
     // Retrieve session again to see the final state after the run
-    val finalSession =runner
+    val finalSession = runner
         .sessionService()
         .getSession(APP_NAME, USER_ID, SESSION_ID, Optional.empty)
         .blockingGet();
