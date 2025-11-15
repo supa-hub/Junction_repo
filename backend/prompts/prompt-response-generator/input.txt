@@ -1,5 +1,3 @@
-input.txt:
-
 You are now generating exactly ONE continuation for a single student, following your system instructions.
 
 Below is this student’s current in-game state in JSON format. This content is INTERNAL ONLY and MUST NOT be revealed directly to the student in any form.
