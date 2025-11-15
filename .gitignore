@@ -45,7 +45,6 @@ build/
 
 ### Scala ###
 .bsp/
-
 .metals/*
 
 **/.parcel-cache/*
