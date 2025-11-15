@@ -1,94 +1,106 @@
-interface Student {
-  rank: number
-  name: string
-  score: number
+import { useEffect, useState } from 'react'
+import { ArrowLeft, Loader2 } from 'lucide-react'
+import { ApiError, api } from '../../api'
+import type { LeaderboardEntry, LeaderboardResponse } from '../../api'
+import { Button } from '../ui/button'
+
+interface LeaderboardProps {
+  sessionId: string
+  sessionName: string
+  onBack: () => void
 }
 
-const students: Student[] = [
-  { rank: 1, name: 'Alex Chen', score: 1450 },
-  { rank: 2, name: 'Maria Garcia', score: 1320 },
-  { rank: 3, name: 'Jordan Smith', score: 1180 },
-  { rank: 4, name: 'Taylor Johnson', score: 1050 },
-  { rank: 5, name: 'Sam Wilson', score: 980 },
-  { rank: 6, name: 'Casey Brown', score: 920 },
-  { rank: 7, name: 'Riley Davis', score: 850 },
-  { rank: 8, name: 'Morgan Lee', score: 780 },
-  { rank: 9, name: 'Jamie Martinez', score: 1240 },
-  { rank: 10, name: 'Chris Anderson', score: 1100 },
-  { rank: 11, name: 'Pat Taylor', score: 990 },
-  { rank: 12, name: 'Drew Thomas', score: 880 },
-  { rank: 13, name: 'Avery Moore', score: 1350 },
-  { rank: 14, name: 'Quinn Jackson', score: 1020 },
-  { rank: 15, name: 'Skylar White', score: 940 },
-  { rank: 16, name: 'Harper Harris', score: 810 },
-  { rank: 17, name: 'Cameron Clark', score: 1190 },
-  { rank: 18, name: 'Dakota Lewis', score: 1060 },
-  { rank: 19, name: 'Reese Walker', score: 970 },
-  { rank: 20, name: 'Sage Hall', score: 890 },
-  { rank: 21, name: 'Phoenix Allen', score: 1280 },
-  { rank: 22, name: 'River Young', score: 1140 },
-  { rank: 23, name: 'Eden King', score: 1010 },
-  { rank: 24, name: 'Rowan Wright', score: 950 },
-  { rank: 25, name: 'Oakley Lopez', score: 870 },
-  { rank: 26, name: 'Lennon Hill', score: 1380 },
-  { rank: 27, name: 'Azure Scott', score: 1090 },
-  { rank: 28, name: 'Indigo Green', score: 1030 },
-  { rank: 29, name: 'Sage Adams', score: 960 },
-  { rank: 30, name: 'Atlas Baker', score: 840 },
-]
+export function Leaderboard({ sessionId, sessionName, onBack }: LeaderboardProps) {
+  const [state, setState] = useState<{ data: LeaderboardResponse | null; loading: boolean; error: string | null }>(
+    { data: null, loading: true, error: null },
+  )
 
-export function Leaderboard() {
-  const topStudents = [...students]
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 10)
-    .map((student, index) => ({
-      ...student,
-      rank: index + 1,
-    }))
+  useEffect(() => {
+    let mounted = true
+    const fetchLeaderboard = async () => {
+      setState({ data: null, loading: true, error: null })
+      try {
+        const response = await api.fetchLeaderboard(sessionId)
+        if (mounted) setState({ data: response, loading: false, error: null })
+      } catch (leaderboardError) {
+        const message = leaderboardError instanceof ApiError && typeof leaderboardError.body === 'object'
+          ? (leaderboardError.body as { message?: string } | null)?.message
+          : null
+        if (mounted) setState({ data: null, loading: false, error: message ?? 'Unable to load leaderboard.' })
+      }
+    }
+    fetchLeaderboard()
+    return () => {
+      mounted = false
+    }
+  }, [sessionId])
 
-  const maxScore = Math.max(...topStudents.map((student) => student.score))
-  const minScore = Math.min(...topStudents.map((student) => student.score))
-  const scoreRange = maxScore - minScore || 1
+  const entries = state.data?.entries ?? []
 
   return (
-    <div className="min-h-screen bg-slate-900 p-8">
-      <div className="mx-auto max-w-[1600px] space-y-8">
-        <div className="space-y-3 text-center">
-          <h1 className="text-5xl text-white">Top 10 Leaderboard</h1>
-          <div className="flex items-center justify-center gap-3 text-lg text-slate-300">
-            <div className="h-3 w-3 animate-pulse rounded-full bg-green-500" />
-            <span>Live</span>
+    <div className="min-h-screen bg-slate-900">
+      <div className="border-b border-slate-800 bg-slate-950/50 p-4">
+        <div className="mx-auto flex max-w-6xl items-center gap-3">
+          <Button variant="ghost" className="text-white" onClick={onBack}>
+            <ArrowLeft className="mr-2 h-4 w-4" /> Back
+          </Button>
+          <div>
+            <p className="text-xs uppercase tracking-wide text-slate-500">Live leaderboard</p>
+            <h1 className="text-2xl text-white">{sessionName}</h1>
           </div>
         </div>
+      </div>
 
-        <div className="mt-12 space-y-4">
-          {topStudents.map((student) => {
-            const isTopThree = student.rank <= 3
-            const barWidth = Math.max(20, ((student.score - minScore) / scoreRange) * 80 + 20)
+      <div className="mx-auto max-w-6xl p-6">
+        {state.loading && (
+          <div className="flex min-h-[40vh] items-center justify-center rounded-2xl border border-slate-800 bg-slate-900">
+            <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+          </div>
+        )}
 
-            return (
-              <div key={student.rank} className="relative">
-                <div className="flex items-center gap-4">
-                  <div
-                    className={`flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-full text-2xl ${
-                      isTopThree
-                        ? 'bg-yellow-500 text-slate-900 ring-4 ring-yellow-400'
-                        : 'bg-slate-700 text-white'
-                    }`}
-                  >
-                    #{student.rank}
-                  </div>
-                  <div className="w-48 flex-shrink-0 text-xl text-white">{student.name}</div>
-                  <div className="relative flex h-14 flex-1 overflow-hidden rounded-full border-2 border-slate-700 bg-slate-800">
-                    <div
-                      className="h-full bg-gradient-to-r from-blue-600 to-purple-600 transition-all duration-700 ease-out"
-                      style={{ width: `${barWidth}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-            )
-          })}
+        {state.error && (
+          <div className="rounded-2xl border border-rose-500/40 bg-rose-500/20 p-4 text-sm text-rose-50">
+            {state.error}
+          </div>
+        )}
+
+        {!state.loading && !state.error && (
+          <div className="space-y-4">
+            {entries.length === 0 && <p className="text-center text-slate-400">No students have played yet.</p>}
+            {entries.map((entry) => (
+              <LeaderboardRow key={entry.studentId} entry={entry} />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function LeaderboardRow({ entry }: { entry: LeaderboardEntry }) {
+  const stats = [
+    { label: 'Wealth', value: entry.wealth },
+    { label: 'Health', value: entry.health },
+    { label: 'Happiness', value: entry.happiness },
+  ]
+
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+      <div className="flex flex-wrap items-center gap-4">
+        <div className={`flex h-12 w-12 items-center justify-center rounded-full text-xl ${entry.rank <= 3 ? 'bg-yellow-400 text-slate-900' : 'bg-slate-800 text-white'}`}>
+          #{entry.rank}
+        </div>
+        <div className="flex-1">
+          <p className="text-lg text-white">{entry.nickname}</p>
+          <p className="text-xs text-slate-400">{entry.scenariosDone} scenarios completed</p>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          {stats.map((stat) => (
+            <div key={stat.label} className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-center">
+              <p className="text-xs uppercase tracking-wide text-slate-500">{stat.label}</p>
+              <p className="text-white">{stat.value}</p>
+            </div>
+          ))}
         </div>
       </div>
     </div>

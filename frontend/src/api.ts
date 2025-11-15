@@ -1,216 +1,274 @@
-import type { Scenario, ScenarioEffect, ScenarioResult, StatName } from './types'
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080').replace(/\/$/, '')
 
-const mockScenarios: Scenario[] = [
-  {
-    id: 'scenario-budget-basics',
-    title: 'First Apartment Budget',
-    description:
-      'You just moved into your first place. Balance rent, savings, and fun spending without going broke mid-month.',
-    estimatedTimeSeconds: 90,
-    prompts: [
-      {
-        id: 'prompt-income-split',
-        text: 'How much of your $2,400 income do you allocate for essential expenses each month?',
-        expectedAnswerType: 'numeric',
-        context: { currency: 'USD' },
-      },
-      {
-        id: 'prompt-priority',
-        text: 'Which priority do you pick for the rest of your budget?',
-        expectedAnswerType: 'choice',
-        options: ['Aggressive savings', 'Paying down debt', 'Lifestyle upgrades'],
-      },
-      {
-        id: 'prompt-reflection',
-        text: 'Explain why this priority fits your strategy.',
-        expectedAnswerType: 'free-text',
-      },
-    ],
-  },
-  {
-    id: 'scenario-side-hustle',
-    title: 'Side Hustle Trade-offs',
-    description:
-      'A friend offers a weekend gig. Decide whether the extra cash outweighs the energy cost during the school week.',
-    estimatedTimeSeconds: 75,
-    prompts: [
-      {
-        id: 'prompt-weekend-hours',
-        text: 'How many hours will you commit to the side hustle?',
-        expectedAnswerType: 'numeric',
-      },
-      {
-        id: 'prompt-habit-impact',
-        text: 'Pick the area that could suffer the most when you add the extra work.',
-        expectedAnswerType: 'choice',
-        options: ['Sleep schedule', 'Grades', 'Social time'],
-      },
-      {
-        id: 'prompt-mitigation',
-        text: 'How will you prevent that trade-off from derailing you?',
-        expectedAnswerType: 'free-text',
-      },
-    ],
-  },
-]
+export class ApiError extends Error {
+  readonly status: number
+  readonly body: unknown
 
-type JoinGamePayload = {
-  classroomCode: string
-  nickname: string
+  constructor(status: number, body: unknown, message?: string) {
+    super(message ?? `Request failed with status ${status}`)
+    this.status = status
+    this.body = body
+  }
 }
 
-type JoinGameResponse = {
+export type SessionStatus = 'waiting_for_start' | 'in_progress' | 'completed'
+
+export interface LoginPayload {
+  email: string
+  password: string
+}
+
+export interface AuthToken {
+  teacherId: string
+  token: string
+  expiresInSeconds: number
+}
+
+export interface CreateTeacherSessionPayload {
+  sessionName: string
+  location: string
+  monthlyIncome: number
+}
+
+export interface SessionCreated {
   sessionId: string
-  playerId: string
+  sessionName: string
+  joinCode: string
+  status: SessionStatus
+  location: string
+  monthlyIncome: number
+}
+
+export interface SessionSummary {
+  sessionId: string
+  sessionName: string
+  joinCode: string
+  status: SessionStatus
+  startedAt?: string
+  playerCount: number
+  location: string
+  monthlyIncome: number
+}
+
+export interface SessionStarted {
+  sessionId: string
+  status: SessionStatus
+  startedAt: string
+}
+
+export interface JoinSessionResponse {
+  sessionId: string
+  studentId: string
   seatNumber: number
+  initialStats: StudentStats
+  sessionStatus?: SessionStatus
 }
 
-type SubmitScenarioPayload = {
-  sessionId: string
-  playerId: string
-  scenarioId: string
-  answers: Record<string, string>
+export interface StudentStats {
+  wealth: number
+  health: number
+  happiness: number
+  riskTaking: number
+  overTrusting: number
+  laziness: number
+  impulsiveness: number
+  scenariosDone: string[]
+  longTermEffects: string[]
 }
 
-type RecordPromptResponsePayload = {
-  sessionId: string
+export interface StudentDashboardResponse {
+  stats: StudentStats
+  sessionStatus?: SessionStatus
+}
+
+export interface ScenarioView {
   scenarioId: string
+  title: string
+  scenarioText: string
+}
+
+export interface PromptMessagePayload {
+  studentId: string
+  message: string
+  scenarioId: string
+  timestamp: string
+}
+
+export interface StatEffect {
+  stat: string
+  delta: number
+}
+
+export interface PromptReply {
   promptId: string
-  answer: string
+  aiReply: string
+  status: 'in_progress' | 'completed'
+  accepted: boolean
+  effects: StatEffect[]
+  effectsSummary?: string | null
+  updatedStats?: StudentStats | null
 }
 
-const mockDelay = (ms = 600) => new Promise((resolve) => setTimeout(resolve, ms))
-
-type MockRequestMeta = {
-  method: 'GET' | 'POST'
-  endpoint: string
+export interface LeaderboardEntry {
+  rank: number
+  studentId: string
+  nickname: string
+  wealth: number
+  health: number
+  happiness: number
+  scenariosDone: number
 }
 
-function logMockRequest(meta: MockRequestMeta, payload?: unknown) {
-  const bodyLabel = payload ? 'payload' : 'no payload'
-  console.info(`[Mock API] → ${meta.method} ${meta.endpoint} (${bodyLabel})`, payload)
+export interface LeaderboardResponse {
+  updatedAt: string
+  entries: LeaderboardEntry[]
 }
 
-function logMockResponse(meta: MockRequestMeta, response: unknown, startedAt: number) {
-  const duration = Date.now() - startedAt
-  console.info(`[Mock API] ← ${meta.method} ${meta.endpoint} (${duration}ms)`, response)
+export interface ClassroomSummary {
+  students: number
+  engagementRate: number
+  avgScenariosCompleted: number
 }
 
-const statList: StatName[] = ['wealth', 'health', 'happiness']
-
-function summarizeEffects(effects: ScenarioEffect[]) {
-  if (!effects.length) {
-    return 'No major stat changes detected. Keep experimenting to see bigger swings.'
-  }
-  const strongest = effects.reduce((previous, current) =>
-    Math.abs(current.delta) > Math.abs(previous.delta) ? current : previous,
-  )
-  const direction = strongest.delta >= 0 ? 'boosted' : 'reduced'
-  return `Your decisions ${direction} ${strongest.stat} by ${Math.abs(strongest.delta)} points.`
+export interface StatDistribution {
+  median: number
+  p90: number
+  min: number
+  max: number
 }
 
-function computeEffectsFromAnswers(answers: Record<string, string>): ScenarioEffect[] {
-  const combinedLength = Object.values(answers).reduce((acc, value) => acc + value.length, 0)
+export interface HabitAverage {
+  mean: number
+  trend: string
+}
 
-  return statList.map((stat, index) => {
-    const swing = ((combinedLength + index * 7) % 21) - 10 // deterministic-ish mock swing
-    return {
-      stat,
-      delta: swing,
-    }
+export interface LeaderboardHighlight {
+  studentId: string
+  nickname: string
+  stat: string
+  value: number
+}
+
+export interface Recommendation {
+  curriculumRef: string
+  summary: string
+  rationale: string
+}
+
+export interface AnalyticsSummary {
+  classroomSummary: ClassroomSummary
+  statDistributions: Record<string, StatDistribution>
+  habitAverages: Record<string, HabitAverage>
+  leaderboardHighlights: LeaderboardHighlight[]
+  recommendations: Recommendation[]
+}
+
+export interface StudentInsights {
+  studentId: string
+  summary: string
+  weakPoints: Array<{ stat: string; reason: string }>
+  strongPoints: Array<{ stat: string; reason: string }>
+  trend: Record<string, number[]>
+}
+
+let authToken: string | null = null
+
+export function setAuthToken(token: string | null) {
+  authToken = token
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      ...(init?.headers ?? {}),
+    },
   })
-}
 
-export function createApiClient() {
-  let scenarioCursor = 0
-
-  return {
-    async joinGame(payload: JoinGamePayload): Promise<JoinGameResponse> {
-      const requestMeta: MockRequestMeta = { method: 'POST', endpoint: '/api/classrooms/join' }
-      logMockRequest(requestMeta, payload)
-      const startedAt = Date.now()
-      await mockDelay(500)
-
-      if (!payload.classroomCode.trim()) {
-        throw new Error('Classroom code is required.')
-      }
-
-      if (!payload.nickname.trim()) {
-        throw new Error('Add a nickname so teammates can see you.')
-      }
-      const response = {
-        sessionId: `session_${payload.classroomCode.trim().toLowerCase()}`,
-        playerId: `player_${payload.nickname.trim().toLowerCase()}`,
-        seatNumber: Math.floor(Math.random() * 28) + 1,
-      }
-
-      logMockResponse(requestMeta, response, startedAt)
-      return response
-    },
-
-    async fetchNextScenario(sessionId: string): Promise<Scenario> {
-      const requestMeta: MockRequestMeta = {
-        method: 'GET',
-        endpoint: `/api/sessions/${sessionId}/next-scenario`,
-      }
-      logMockRequest(requestMeta, { sessionId })
-      const startedAt = Date.now()
-      await mockDelay(700)
-      const baseScenario = mockScenarios[scenarioCursor % mockScenarios.length]
-      scenarioCursor += 1
-
-      const scenario = {
-        ...baseScenario,
-        id: `${baseScenario.id}_${scenarioCursor}_${sessionId}`,
-        prompts: baseScenario.prompts.map((prompt, idx) => ({
-          ...prompt,
-          id: `${baseScenario.id}_${scenarioCursor}_prompt_${idx}`,
-        })),
-      }
-
-      logMockResponse(requestMeta, scenario, startedAt)
-      return scenario
-    },
-
-    async submitScenarioResponse(payload: SubmitScenarioPayload): Promise<ScenarioResult> {
-      const requestMeta: MockRequestMeta = {
-        method: 'POST',
-        endpoint: `/api/sessions/${payload.sessionId}/scenarios/${payload.scenarioId}`,
-      }
-      logMockRequest(requestMeta, payload)
-      const startedAt = Date.now()
-      await mockDelay(900)
-      const effects = computeEffectsFromAnswers(payload.answers)
-
-      const response = {
-        scenarioId: payload.scenarioId,
-        userId: payload.playerId,
-        completedAt: Date.now(),
-        effects,
-        effectsSummary: `${summarizeEffects(effects)} You logged ${Object.keys(payload.answers).length} decisions for this scenario.`,
-      }
-
-      logMockResponse(requestMeta, response, startedAt)
-      return response
-    },
-
-    async recordPromptResponse(payload: RecordPromptResponsePayload) {
-      const requestMeta: MockRequestMeta = {
-        method: 'POST',
-        endpoint: `/api/sessions/${payload.sessionId}/prompts/${payload.promptId}`,
-      }
-      logMockRequest(requestMeta, payload)
-      const startedAt = Date.now()
-      await mockDelay(350)
-      const response = { accepted: true, savedAt: Date.now() }
-      logMockResponse(requestMeta, response, startedAt)
-      return response
-    },
+  if (!response.ok) {
+    let body: unknown = null
+    try {
+      const text = await response.text()
+      body = text ? JSON.parse(text) : null
+    } catch {
+      body = null
+    }
+    const message = typeof body === 'object' && body && 'message' in body ? (body as { message: string }).message : undefined
+    throw new ApiError(response.status, body, message)
   }
+
+  if (response.status === 204) {
+    return undefined as T
+  }
+
+  const text = await response.text()
+  return text ? (JSON.parse(text) as T) : (undefined as T)
 }
 
-export type ApiClient = ReturnType<typeof createApiClient>
+export const api = {
+  loginTeacher(payload: LoginPayload) {
+    return request<AuthToken>('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
 
-export const api = createApiClient()
+  createTeacherSession(teacherId: string, payload: CreateTeacherSessionPayload) {
+    return request<SessionCreated>(`/api/teachers/${teacherId}/sessions`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
 
-export type { JoinGamePayload, JoinGameResponse, SubmitScenarioPayload }
+  listTeacherSessions(teacherId: string) {
+    return request<SessionSummary[]>(`/api/teachers/${teacherId}/sessions`, {
+      method: 'GET',
+    })
+  },
+
+  startTeacherSession(teacherId: string, sessionId: string) {
+    return request<SessionStarted>(`/api/teachers/${teacherId}/sessions/${sessionId}/start`, {
+      method: 'POST',
+    })
+  },
+
+  joinSession(joinCode: string, userName: string) {
+    return request<JoinSessionResponse>(`/api/sessions/${joinCode}/students`, {
+      method: 'POST',
+      body: JSON.stringify({ userName }),
+    })
+  },
+
+  getStudentDashboard(sessionId: string, studentId: string) {
+    return request<StudentDashboardResponse>(`/api/sessions/${sessionId}/students/${studentId}`)
+  },
+
+  fetchNextScenario(sessionId: string, studentId: string) {
+    const query = new URLSearchParams({ studentId }).toString()
+    return request<ScenarioView>(`/api/sessions/${sessionId}/next-scenario?${query}`)
+  },
+
+  sendPromptMessage(sessionId: string, promptId: string, payload: PromptMessagePayload) {
+    return request<PromptReply>(`/api/sessions/${sessionId}/prompts/${promptId}`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
+
+  fetchLeaderboard(sessionId: string) {
+    return request<LeaderboardResponse>(`/api/sessions/${sessionId}/leaderboard`)
+  },
+
+  fetchAnalyticsSummary(sessionId: string) {
+    return request<AnalyticsSummary>(`/api/sessions/${sessionId}/analytics/summary`)
+  },
+
+  fetchStudentInsights(sessionId: string, studentId: string) {
+    return request<StudentInsights>(`/api/sessions/${sessionId}/students/${studentId}/insights`)
+  },
+}
+
+export type ApiClient = typeof api
+export type { JoinSessionResponse as JoinGameResponse }

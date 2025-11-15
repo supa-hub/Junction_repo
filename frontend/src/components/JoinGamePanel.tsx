@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { ArrowRight, Loader2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { api } from '../api'
+import { ApiError, api } from '../api'
 import { persistPlayerSession, type PlayerSession } from '../playerSession'
 import { Button } from './ui/button'
 
@@ -17,15 +17,13 @@ export function JoinGamePanel() {
     setIsSubmitting(true)
 
     try {
-      const joinResponse = await api.joinGame({
-        classroomCode: form.code,
-        nickname: form.nickname,
-      })
+      const joinResponse = await api.joinSession(form.code.trim(), form.nickname.trim())
 
       const sessionPayload: PlayerSession = {
         ...joinResponse,
-        nickname: form.nickname,
-        classroomCode: form.code,
+        ...(joinResponse.sessionStatus ? { sessionStatus: joinResponse.sessionStatus } : {}),
+        nickname: form.nickname.trim(),
+        classroomCode: form.code.trim(),
       }
 
       persistPlayerSession(sessionPayload)
@@ -35,9 +33,14 @@ export function JoinGamePanel() {
         replace: false,
       })
     } catch (joinError) {
-      const message =
-        joinError instanceof Error ? joinError.message : 'Could not join the classroom. Try again.'
-      setError(message)
+      if (joinError instanceof ApiError) {
+        const body = joinError.body as { message?: string } | null
+        setError(body?.message ?? 'Could not join the classroom. Try again.')
+      } else if (joinError instanceof Error) {
+        setError(joinError.message)
+      } else {
+        setError('Could not join the classroom. Try again.')
+      }
     } finally {
       setIsSubmitting(false)
     }

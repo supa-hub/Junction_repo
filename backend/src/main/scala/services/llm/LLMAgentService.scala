@@ -1,4 +1,4 @@
-package services.llm
+package services
 
 import com.google.adk.agents.*
 import com.google.adk.events.Event
@@ -12,9 +12,47 @@ import java.util.logging.{Level, Logger}
 import scala.jdk.CollectionConverters.*
 
 
+final class StoryFlowAgent(
+  name: String,
+  private val storyGenerator: LlmAgent,
+  private val loopAgent: LoopAgent,
+  private val sequentialAgent: SequentialAgent
+) extends BaseAgent(name, "Orchestrates story generation, critique, revision, and checks.", List(storyGenerator, loopAgent, sequentialAgent).asJava, null, null):
+
+  override def runAsyncImpl(invocationContext: InvocationContext): Flowable[Event] =
+    // Stage 1. Initial Story Generation
+    val storyGenFlow = storyGenerator.runAsync(invocationContext)
+
+    // Stage 2: Critic-Reviser Loop (runs after story generation completes)
+    val criticReviserFlow = loopAgent.runAsync(invocationContext)
+
+    // Stage 3: Post-Processing (runs after critic-reviser loop completes)
+    val postProcessingFlow = sequentialAgent.runAsync(invocationContext)
+
+    // Stage 4: Conditional Regeneration (runs after post-processing completes)
+    val conditionalRegenFlow = Flowable.defer(() =>
+      val toneCheckResult: String = invocationContext
+        .session()
+        .state()
+        .get("tone_check_result")
+        .toString
+
+      if "negative".equalsIgnoreCase(toneCheckResult) then
+        storyGenerator.runAsync(invocationContext)
+      else
+        Flowable.empty()
+    )
+
+    Flowable.concatArray(storyGenFlow, criticReviserFlow, postProcessingFlow, conditionalRegenFlow)
+
+  override def runLiveImpl(invocationContext: InvocationContext): Flowable[Event] = ???
+
+end StoryFlowAgent
+
 
 // get class name
 def className[A](using m: Manifest[A]) = m.toString
+
 
 object LLMAgentService:
   // --- Constants ---
@@ -109,9 +147,6 @@ object LLMAgentService:
       .subAgents(grammarCheck, toneCheck)
       .build()
 
-
-  // Methods
-  // --------------------------------------
   def generateAgent(name: String): StoryFlowAgent = StoryFlowAgent(name, storyGenerator, loopAgent, sequentialAgent)
 
   def runCustomAgent(agent: StoryFlowAgent, userTopic: String) =
@@ -153,14 +188,14 @@ object LLMAgentService:
       )
 
     // Retrieve session again to see the final state after the run
-    val finalSession = runner
+    val finalSession =runner
         .sessionService()
         .getSession(APP_NAME, USER_ID, SESSION_ID, Optional.empty)
-        .blockingGet()
+        .blockingGet();
 
     assert(finalSession != null)
 
-    System.out.println("Final Session State:" + finalSession.state())
+    System.out.println("Final Session State:" + finalSession.state());
     System.out.println("-------------------------------\n");
 
 end LLMAgentService
