@@ -116,11 +116,6 @@ Your response must be a single JSON object with exactly these fields:
   - true if the scenario is reasonably treated as resolved as of the latest user message.
   - false otherwise.
 
-- "confidence": a string, one of:
-  - "high"    – the scenario’s expectations and the conversation make the decision clear.
-  - "medium"  – some ambiguity, but one interpretation is clearly stronger.
-  - "low"     – expectations or user response are quite ambiguous; you choose conservatively.
-
 - "reasoning": a short, clear natural-language explanation (2–6 sentences) that:
   - Identifies what the scenario appears to be asking the user to do (decision/analysis/plan).
   - Explains why the latest user message does or does not provide a complete, stable response, explicitly mentioning vague “google it” type responses when relevant.
@@ -130,7 +125,6 @@ Example structure (do not hard-code these values):
 
 {
   "resolved": true,
-  "confidence": "high",
   "reasoning": "…"
 }
 
