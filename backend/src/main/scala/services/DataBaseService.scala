@@ -20,7 +20,7 @@ import scala.jdk.CollectionConverters.*
 object DataBaseService:
   // indexes to use in the compoundIndexes. The compoundIndex is used
   // to identify a users unique sessions
-  private val sessionField = "sessions"
+  private val sessionField = "session"
   private val userCompoundIndex = Indexes.ascending("email")
   private val sessionIndex = Index.ascending("sessionName")
   private val sessionCodeIndex = Index.ascending("sessionJoinCode")
@@ -85,7 +85,7 @@ object DataBaseService:
 
     val addressString = if settings.isSRV
       then s"${settings.clusterName.getOrElse("")}.mongodb.net"
-      else "localhost:28017"
+      else "localhost:27017"
 
     s"mongodb${srvString}://${loginString}${addressString}/?retryWrites=true&w=majority"
 
@@ -197,7 +197,7 @@ object DataBaseService:
     val filter = userFilter(email)
 
     // find a session join code that isn't used yet
-    val sessionCode = fs2.Stream.eval(
+    val sessionCode = fs2.Stream.repeatEval(
       professorSessionCollection
         .map(coll =>
           val code = SessionMongo.generateCode
@@ -205,7 +205,7 @@ object DataBaseService:
         )
         .flatMap((code, res) => (IO.pure(code), res.first).parTupled)
       )
-      .dropWhile(_._2.isEmpty)
+      .dropWhile(_._2.nonEmpty)
       .head
       .compile
       .toList
