@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { HomePage } from './pages/HomePage'
 import { PlaySessionPage } from './pages/PlaySessionPage'
 import { TeacherLoginPage } from './pages/TeacherLoginPage'
+import { TeacherDashboardPage } from './pages/TeacherDashboardPage'
 
 export default function App() {
   return (
@@ -9,6 +10,7 @@ export default function App() {
       <Route path="/" element={<HomePage />} />
       <Route path="/play/:sessionId" element={<PlaySessionPage />} />
       <Route path="/teacher" element={<TeacherLoginPage />} />
+      <Route path="/teacher/dashboard" element={<TeacherDashboardPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
