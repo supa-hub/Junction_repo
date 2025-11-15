@@ -1,0 +1,33 @@
+{
+  "student_state": {
+    "student_id": "optional-string-id",
+    "location_city": "Helsinki",
+    "monthly_income_eur": 600,
+    "wealth_score": 1400,
+    "happiness_score_percent": 60,
+    "health_score_percent": 80,
+    "habit_scores": {
+      "risk_taking": 8,
+      "laziness": 3,
+      "impulsiveness": 7
+    },
+    "long_term_effects": [
+      "the student shoplifted groceries but has not yet faced consequences"
+    ],
+    "completed_scenarios": [
+      "ID1",
+      "ID2",
+      "ID3"
+    ],
+    "student_language": "fi"
+  },
+  "scenario_context": {
+    "scenario": "It’s a grey Tuesday afternoon and you’re scrolling through your phone in your room, putting off starting the reading for tomorrow's sociology lecture. A notification from your mobile banking app pops up: \"A new benefit package is waiting for you!\" You tap it open.\nThe message congratulates you on being an active customer and offers you a free upgrade to a \"Student Premium\" package. The page looks slick and highlights three main benefits: your plain debit card will be replaced with a new combination debit/credit card with a 1,000 EUR credit limit; the interest rate on your savings account will increase from 0.25% to 1.0%; and you get one free 30-minute remote session with a personal savings advisor to \"plan your financial future\". The app says the upgrade is free for the first year.\n\nIt all seems pretty good, and there's a large, friendly button that says \"Upgrade my account now\". Further down the page, in a much smaller font, is a link to the full \"Terms and Conditions (PDF)\". You feel a bit uneasy about the idea of a credit card, but a higher interest rate on your savings sounds nice, and maybe talking to an advisor about the student loan money you’re investing would be helpful.",
+    "userMessageHistory": [
+      "I open the PDF"
+    ],
+    "modelMessageHistory": []
+  },
+  "student_answer": "The latest message goes here",
+  "pass_evaluator_reasoning": "Reasoning goes here"
+}
