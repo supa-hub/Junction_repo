@@ -31,6 +31,7 @@ object SessionMongo:
       .alphanumeric
       .take(6)
       .mkString
+end SessionMongo
 
 final case class StudentStatsMongo(
   _id: ObjectId,
@@ -40,15 +41,30 @@ final case class StudentStatsMongo(
   scenariosDone: List[String],
 )
 
+final case class StudentHabitsMongo(
+  _id: ObjectId,
+  riskTaking: models.Number,
+  overTrusting: models.Number,
+  laziness: models.Number,
+  impulsiveness: models.Number
+)
+
 final case class StudentUserMongo(
   _id: ObjectId = ObjectId.gen,
   userName: String,
   stats: StudentStatsMongo = StudentStatsMongo(
     _id = ObjectId.gen,
-    wealth = 0,
-    health = 0,
-    happiness = 0,
+    wealth = 0.0,
+    health = 0.0,
+    happiness = 0.0,
     scenariosDone = List()
+  ),
+  habits: StudentHabitsMongo = StudentHabitsMongo(
+    _id = ObjectId.gen,
+    riskTaking = 0.0,
+    overTrusting = 0.0,
+    laziness = 0.0,
+    impulsiveness = 0.0
   )
 )
 
@@ -81,6 +97,8 @@ package circecoders:
   given sessionEncoder: Encoder[SessionMongo] = deriveEncoder[SessionMongo]
   given studentStatsDecoder: Decoder[StudentStatsMongo] = deriveDecoder[StudentStatsMongo]
   given studentStatsEncoder: Encoder[StudentStatsMongo] = deriveEncoder[StudentStatsMongo]
+  given studentHabitsDecoder: Decoder[StudentHabitsMongo] = deriveDecoder[StudentHabitsMongo]
+  given studenthabitsEncoder: Encoder[StudentHabitsMongo] = deriveEncoder[StudentHabitsMongo]
   given studentUserDecoder: Decoder[StudentUserMongo] = deriveDecoder[StudentUserMongo]
   given studentUserEncoder: Encoder[StudentUserMongo] = deriveEncoder[StudentUserMongo]
   given professorSessionDecoder: Decoder[ProfessorSessionMongo] = deriveDecoder[ProfessorSessionMongo]
@@ -93,6 +111,7 @@ package mongocodecs:
   import circecoders.given
   given sessionCodecProvider: MongoCodecProvider[SessionMongo] = deriveCirceCodecProvider
   given studentStatsCodecProvider: MongoCodecProvider[StudentStatsMongo] = deriveCirceCodecProvider
+  given studentHabitsCodecProvider: MongoCodecProvider[StudentHabitsMongo] = deriveCirceCodecProvider
   given studentUserCodecProvider: MongoCodecProvider[StudentUserMongo] = deriveCirceCodecProvider
   given professorSessionCodecProvider: MongoCodecProvider[ProfessorSessionMongo] = deriveCirceCodecProvider
   given professorUserCodecProvider: MongoCodecProvider[ProfessorUserMongo] = deriveCirceCodecProvider

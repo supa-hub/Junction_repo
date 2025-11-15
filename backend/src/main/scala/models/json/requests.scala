@@ -25,9 +25,17 @@ final case class StudentStats(
   scenariosDone: List[String],
 ) derives ReadWriter
 
+final case class StudentHabits(
+  riskTaking: models.Number,
+  overTrusting: models.Number,
+  laziness: models.Number,
+  impulsiveness: models.Number
+) derives ReadWriter
+
 final case class StudentUser(
   userName: String,
-  stats: StudentStats
+  stats: StudentStats,
+  habits: StudentHabits
 ) derives ReadWriter
 
 final case class ProfessorUser(
@@ -51,6 +59,8 @@ package circecoders:
   given loginPayloadDecoder: Decoder[LoginPayload] = deriveDecoder[LoginPayload]
   given studentStatsEncoder: Encoder[StudentStats] = deriveEncoder[StudentStats]
   given studentStatsDecoder: Decoder[StudentStats] = deriveDecoder[StudentStats]
+  given studentHabitsEncoder: Encoder[StudentHabits] = deriveEncoder[StudentHabits]
+  given studentHabitsDecoder: Decoder[StudentHabits] = deriveDecoder[StudentHabits]
   given studentUserEncoder: Encoder[StudentUser] = deriveEncoder[StudentUser]
   given studentUserDecoder: Decoder[StudentUser] = deriveDecoder[StudentUser]
   given professorUserEncoder: Encoder[ProfessorUser] = deriveEncoder[ProfessorUser]
@@ -65,6 +75,7 @@ package http4sentities:
   given sessionPayloadEntity: EntityDecoder[IO, SessionPayload] = jsonOf[IO, SessionPayload]
   given loginPayloadEntity: EntityDecoder[IO, LoginPayload] = jsonOf[IO, LoginPayload]
   given studentStatsEntity: EntityDecoder[IO, StudentStats] = jsonOf[IO, StudentStats]
+  given studentHabitsEntity: EntityDecoder[IO, StudentHabits] = jsonOf[IO, StudentHabits]
   given studentUserEntity: EntityDecoder[IO, StudentUser] = jsonOf[IO, StudentUser]
   given professorUserEntity: EntityDecoder[IO, ProfessorUser] = jsonOf[IO, ProfessorUser]
 end http4sentities

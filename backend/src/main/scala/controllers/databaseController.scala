@@ -38,7 +38,6 @@ def createNewProfessor(payload: LoginPayload): IO[Either[ErrorResponse, Successf
       case Left(err) => Left(ErrorResponse(s"Couldn't create the user due to an error: ${err.getMessage}"))
     }
 
-
 def loginProfessor(payload: LoginPayload): IO[Either[ErrorResponse, SuccessfulResponse]] =
   DataBaseService
     .getProfessorData(payload.email)

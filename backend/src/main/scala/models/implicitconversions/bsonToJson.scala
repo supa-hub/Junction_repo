@@ -12,10 +12,19 @@ given Conversion[StudentStatsMongo, StudentStats] with
     scenariosDone = x.scenariosDone
   )
 
+given Conversion[StudentHabitsMongo, StudentHabits] with
+  override def apply(x: StudentHabitsMongo): StudentHabits = StudentHabits(
+    overTrusting = x.overTrusting,
+    laziness = x.laziness,
+    impulsiveness = x.impulsiveness,
+    riskTaking = x.riskTaking
+  )
+
 given Conversion[StudentUserMongo, StudentUser] with
   override def apply(x: StudentUserMongo): StudentUser = StudentUser(
     userName = x.userName,
-    stats = x.stats
+    stats = x.stats,
+    habits = x.habits
   )
 
 given Conversion[SessionMongo, Session] with
