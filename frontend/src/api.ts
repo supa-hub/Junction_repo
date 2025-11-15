@@ -11,6 +11,8 @@ export class ApiError extends Error {
   }
 }
 
+export type SessionStatus = 'waiting_for_start' | 'in_progress' | 'completed'
+
 export interface LoginPayload {
   email: string
   password: string
@@ -32,7 +34,7 @@ export interface SessionCreated {
   sessionId: string
   sessionName: string
   joinCode: string
-  status: string
+  status: SessionStatus
   location: string
   monthlyIncome: number
 }
@@ -41,7 +43,7 @@ export interface SessionSummary {
   sessionId: string
   sessionName: string
   joinCode: string
-  status: string
+  status: SessionStatus
   startedAt?: string
   playerCount: number
   location: string
@@ -50,7 +52,7 @@ export interface SessionSummary {
 
 export interface SessionStarted {
   sessionId: string
-  status: string
+  status: SessionStatus
   startedAt: string
 }
 
@@ -59,6 +61,7 @@ export interface JoinSessionResponse {
   studentId: string
   seatNumber: number
   initialStats: StudentStats
+  sessionStatus?: SessionStatus
 }
 
 export interface StudentStats {
@@ -75,6 +78,7 @@ export interface StudentStats {
 
 export interface StudentDashboardResponse {
   stats: StudentStats
+  sessionStatus?: SessionStatus
 }
 
 export interface ScenarioView {

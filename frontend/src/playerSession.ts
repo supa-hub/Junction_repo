@@ -1,8 +1,9 @@
-import type { JoinGameResponse } from './api'
+import type { JoinGameResponse, SessionStatus } from './api'
 
 export type PlayerSession = JoinGameResponse & {
   nickname: string
   classroomCode: string
+  sessionStatus?: SessionStatus
 }
 
 const storageKey = (sessionId: string) => `player-session-${sessionId}`

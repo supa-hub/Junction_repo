@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useLocation, useParams } from 'react-router-dom'
 import { Loader2, Send, Sparkles, Heart, Smile, Wallet } from 'lucide-react'
-import { ApiError, api } from '../api'
+import { ApiError, api, type SessionStatus } from '../api'
 import type { PromptReply, ScenarioView, StatEffect, StudentStats } from '../api'
 import { Button } from '../components/ui/button'
 import { cn } from '../components/ui/utils'
@@ -109,11 +109,13 @@ export function PlaySessionPage() {
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<PromptReply | null>(null)
   const [stats, setStats] = useState<StudentStats>(() => player?.initialStats ?? defaultStats)
+  const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(() => player?.sessionStatus ?? null)
 
   const chatEndRef = useRef<HTMLDivElement | null>(null)
   const messageIdRef = useRef(0)
   const promptCounterRef = useRef(0)
   const [activePromptId, setActivePromptId] = useState(() => `prm-ui-${promptCounterRef.current}`)
+  const waitingNoticeRef = useRef(false)
 
   const nextMessageId = () => {
     messageIdRef.current += 1
@@ -143,18 +145,22 @@ export function PlaySessionPage() {
     try {
       const dashboard = await api.getStudentDashboard(sessionId, player.studentId)
       setStats(dashboard.stats)
+      setSessionStatus((previous) => dashboard.sessionStatus ?? previous ?? player.sessionStatus ?? null)
     } catch (dashboardError) {
       console.warn('Unable to sync player stats', dashboardError)
+      setSessionStatus((previous) => previous ?? player.sessionStatus ?? null)
     }
   }, [player, sessionId])
 
   const loadScenario = useCallback(async () => {
     if (!player || !sessionId) return
+    if (sessionStatus && sessionStatus !== 'in_progress') return
     setStatus('loadingScenario')
     setError(null)
     setResult(null)
     try {
       const view = await api.fetchNextScenario(sessionId, player.studentId)
+      setSessionStatus('in_progress')
       setScenario(view)
       setMessages([
         {
@@ -185,23 +191,79 @@ export function PlaySessionPage() {
         ? (scenarioError.body as { message?: string } | null)?.message
         : null
       setError(message ?? 'Unable to load the next scenario just yet.')
+      if (scenarioError instanceof ApiError && (scenarioError.status === 409 || scenarioError.status === 423)) {
+        setSessionStatus('waiting_for_start')
+      }
     } finally {
       setStatus('idle')
     }
-  }, [nextPromptId, player, sessionId])
+  }, [nextPromptId, player, sessionId, sessionStatus])
 
   useEffect(() => {
     if (locationState) {
       setPlayer(locationState)
       persistPlayerSession(locationState)
+      setSessionStatus(locationState.sessionStatus ?? null)
     }
   }, [locationState])
 
   useEffect(() => {
     if (!player || !sessionId) return
     syncStats()
-    loadScenario()
-  }, [player, sessionId, loadScenario, syncStats])
+  }, [player, sessionId, syncStats])
+
+  useEffect(() => {
+    if (!player || !sessionId) return
+    if (sessionStatus === 'in_progress') {
+      waitingNoticeRef.current = false
+      loadScenario()
+      return
+    }
+
+    if (!sessionStatus) return
+
+    setScenario(null)
+    setResult(null)
+
+    if ((sessionStatus === 'waiting_for_start' || sessionStatus === 'completed') && !waitingNoticeRef.current) {
+      waitingNoticeRef.current = true
+      setMessages(() => {
+        const noticeId = nextMessageId()
+        const noticeText = sessionStatus === 'waiting_for_start'
+          ? 'Waiting for game to start'
+          : 'This classroom simulation has ended. Thank you for playing!'
+        return [
+          {
+            id: noticeId,
+            sender: 'system',
+            text: noticeText,
+            timestamp: Date.now(),
+            tag: 'Status',
+          },
+        ]
+      })
+    }
+  }, [player, sessionId, sessionStatus, loadScenario])
+
+  useEffect(() => {
+    if (!player || !sessionId) return
+    if (sessionStatus && sessionStatus !== 'waiting_for_start') return
+    const intervalId = window.setInterval(() => {
+      syncStats()
+    }, 5000)
+    return () => window.clearInterval(intervalId)
+  }, [player, sessionId, sessionStatus, syncStats])
+
+  useEffect(() => {
+    if (!sessionId || !sessionStatus) return
+    setPlayer((previous) => {
+      if (!previous) return previous
+      if (previous.sessionStatus === sessionStatus) return previous
+      const updated = { ...previous, sessionStatus }
+      persistPlayerSession(updated)
+      return updated
+    })
+  }, [sessionId, sessionStatus])
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -246,6 +308,7 @@ export function PlaySessionPage() {
   }
 
   const handleNextScenario = () => {
+    if (sessionStatus !== 'in_progress') return
     loadScenario()
   }
 
@@ -256,6 +319,10 @@ export function PlaySessionPage() {
       </div>
     )
   }
+
+  const isWaiting = sessionStatus === 'waiting_for_start'
+  const isCompleted = sessionStatus === 'completed'
+  const canSendMessage = !isWaiting && !isCompleted && status === 'idle' && !!scenario && (!result || result.status !== 'completed')
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-950 text-white">
@@ -273,63 +340,87 @@ export function PlaySessionPage() {
         <section className="flex flex-1 flex-col rounded-3xl border border-white/10 bg-slate-900/60 p-6 backdrop-blur">
           <div className="flex flex-col gap-1 border-b border-white/5 pb-4">
             <p className="text-xs uppercase tracking-widest text-slate-400">Scenario</p>
-            <h2 className="text-xl font-semibold text-white">{scenario?.title ?? 'Connecting to live game...'}</h2>
+            <h2 className="text-xl font-semibold text-white">
+              {scenario?.title
+                ?? (sessionStatus === 'waiting_for_start'
+                  ? 'Waiting for game to start'
+                  : sessionStatus === 'completed'
+                    ? 'Session completed'
+                    : 'Connecting to live game...')}
+            </h2>
           </div>
 
-          <div className="mt-4 flex-1 space-y-4 overflow-y-auto pr-2">
-            {messages.map((message) => (
-              <div key={message.id} className={cn('flex', message.sender === 'player' ? 'justify-end' : 'justify-start')}>
-                <div
-                  className={cn(
-                    'max-w-[85%] rounded-2xl px-4 py-3 text-sm shadow-lg shadow-black/20',
-                    message.sender === 'player' && 'bg-blue-600 text-white',
-                    message.sender === 'guide' && 'border border-white/5 bg-slate-800 text-slate-100',
-                    message.sender === 'system' && 'border border-purple-500/40 bg-purple-700/40 text-purple-100',
-                  )}
-                >
-                  {message.tag && (
-                    <p className="mb-1 text-[10px] uppercase tracking-widest text-slate-400">{message.tag}</p>
-                  )}
-                  <p className="whitespace-pre-wrap leading-relaxed">{message.text}</p>
+          {isWaiting ? (
+            <div className="mt-6 flex flex-1 flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 bg-slate-950/40 p-10 text-center">
+              <Loader2 className="mb-4 size-8 animate-spin text-slate-300" />
+              <h3 className="text-lg font-semibold text-white">Waiting for game to start</h3>
+              <p className="mt-2 max-w-md text-sm text-slate-400">Stay ready—your teacher will launch the simulation shortly.</p>
+            </div>
+          ) : isCompleted ? (
+            <div className="mt-6 flex flex-1 flex-col items-center justify-center rounded-2xl border border-emerald-400/40 bg-emerald-500/10 p-10 text-center text-white">
+              <h3 className="text-lg font-semibold">Session completed</h3>
+              <p className="mt-2 max-w-md text-sm text-slate-100">This classroom simulation has wrapped up. Thanks for playing!</p>
+            </div>
+          ) : (
+            <>
+              <div className="mt-4 flex-1 space-y-4 overflow-y-auto pr-2">
+                {messages.map((message) => (
+                  <div key={message.id} className={cn('flex', message.sender === 'player' ? 'justify-end' : 'justify-start')}>
+                    <div
+                      className={cn(
+                        'max-w-[85%] rounded-2xl px-4 py-3 text-sm shadow-lg shadow-black/20',
+                        message.sender === 'player' && 'bg-blue-600 text-white',
+                        message.sender === 'guide' && 'border border-white/5 bg-slate-800 text-slate-100',
+                        message.sender === 'system' && 'border border-purple-500/40 bg-purple-700/40 text-purple-100',
+                      )}
+                    >
+                      {message.tag && (
+                        <p className="mb-1 text-[10px] uppercase tracking-widest text-slate-400">{message.tag}</p>
+                      )}
+                      <p className="whitespace-pre-wrap leading-relaxed">{message.text}</p>
+                    </div>
+                  </div>
+                ))}
+                <div ref={chatEndRef} />
+              </div>
+
+              <div className="mt-4">
+                <p className="text-xs uppercase tracking-widest text-slate-400">Respond</p>
+                <div className="mt-2 rounded-2xl border border-white/10 bg-slate-950/60 p-3">
+                  <textarea
+                    value={inputText}
+                    onChange={(event) => setInputText(event.target.value)}
+                    placeholder={scenario
+                      ? 'Explain your next move…'
+                      : 'Waiting on the next scenario prompt...'}
+                    rows={3}
+                    className="w-full resize-none rounded-xl border border-white/10 bg-transparent p-3 text-sm text-white placeholder:text-slate-500 focus:border-blue-400/60 focus:outline-none"
+                    disabled={!canSendMessage}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' && !event.shiftKey) {
+                        event.preventDefault()
+                        handleSendMessage()
+                      }
+                    }}
+                  />
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <Button
+                      type="button"
+                      onClick={handleSendMessage}
+                      disabled={!canSendMessage || !inputText.trim()}
+                    >
+                      {status === 'sending' ? <Loader2 className="size-5 animate-spin" /> : <Send className="size-5" />}
+                      {status === 'sending' ? 'Sending' : 'Send'}
+                    </Button>
+                    <div className="text-xs text-slate-500">Press Enter to send • Shift + Enter for a new line</div>
+                  </div>
                 </div>
               </div>
-            ))}
-            <div ref={chatEndRef} />
-          </div>
-
-          <div className="mt-4">
-            <p className="text-xs uppercase tracking-widest text-slate-400">Respond</p>
-            <div className="mt-2 rounded-2xl border border-white/10 bg-slate-950/60 p-3">
-              <textarea
-                value={inputText}
-                onChange={(event) => setInputText(event.target.value)}
-                placeholder={scenario ? 'Explain your next move…' : 'Waiting on the next scenario prompt...'}
-                rows={3}
-                className="w-full resize-none rounded-xl border border-white/10 bg-transparent p-3 text-sm text-white placeholder:text-slate-500 focus:border-blue-400/60 focus:outline-none"
-                disabled={status !== 'idle' || !scenario || result?.status === 'completed'}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' && !event.shiftKey) {
-                    event.preventDefault()
-                    handleSendMessage()
-                  }
-                }}
-              />
-              <div className="mt-3 flex flex-wrap items-center gap-3">
-                <Button
-                  type="button"
-                  onClick={handleSendMessage}
-                  disabled={status !== 'idle' || !scenario || result?.status === 'completed' || !inputText.trim()}
-                >
-                  {status === 'sending' ? <Loader2 className="size-5 animate-spin" /> : <Send className="size-5" />}
-                  {status === 'sending' ? 'Sending' : 'Send'}
-                </Button>
-                <div className="text-xs text-slate-500">Press Enter to send • Shift + Enter for a new line</div>
-              </div>
-            </div>
-          </div>
+            </>
+          )}
         </section>
 
-        {result && (
+        {result && !isWaiting && !isCompleted && (
           <div className="rounded-3xl border border-emerald-400/40 bg-emerald-500/10 p-6 text-sm text-white">
             <div className="flex items-center gap-2 text-emerald-300">
               <Sparkles className="size-4" /> Scenario logged
@@ -346,63 +437,16 @@ export function PlaySessionPage() {
                 </div>
               ))}
             </div>
-            <Button className="mt-4 w-full" onClick={handleNextScenario}>
+            <Button className="mt-4 w-full" onClick={handleNextScenario} disabled={sessionStatus !== 'in_progress'}>
               Load next scenario
             </Button>
           </div>
         )}
 
-        <section className="grid gap-6 lg:grid-cols-2">
-          <HabitBreakdown stats={stats} />
-          <LongTermEffectsPanel effects={stats.longTermEffects} />
-        </section>
-
         {error && (
           <div className="rounded-2xl border border-rose-400/40 bg-rose-500/20 p-3 text-sm text-rose-50">{error}</div>
         )}
       </main>
-    </div>
-  )
-}
-
-function HabitBreakdown({ stats }: { stats: StudentStats }) {
-  const habitStats = [
-    { label: 'Risk taking', value: stats.riskTaking },
-    { label: 'Over trusting', value: stats.overTrusting },
-    { label: 'Laziness', value: stats.laziness },
-    { label: 'Impulsiveness', value: stats.impulsiveness },
-  ]
-  return (
-    <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-6">
-      <h3 className="text-lg text-white">Habit signals</h3>
-      <p className="text-sm text-slate-400">Hidden traits driving long-term effects.</p>
-      <div className="mt-4 grid gap-4 sm:grid-cols-2">
-        {habitStats.map((habit) => (
-          <div key={habit.label} className="rounded-xl border border-white/10 bg-slate-950/50 p-4">
-            <p className="text-xs uppercase tracking-wide text-slate-500">{habit.label}</p>
-            <p className="text-2xl text-white">{habit.value.toFixed(1)}</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function LongTermEffectsPanel({ effects }: { effects: string[] }) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-6">
-      <h3 className="text-lg text-white">Long-term effects</h3>
-      {effects.length === 0 ? (
-        <p className="text-sm text-slate-400">No long-term effects logged yet. Finish more scenarios to unlock them.</p>
-      ) : (
-        <ul className="mt-4 space-y-2 text-sm text-slate-200">
-          {effects.map((effect) => (
-            <li key={effect} className="rounded-lg border border-white/10 bg-slate-950/40 px-3 py-2">
-              {effect}
-            </li>
-          ))}
-        </ul>
-      )}
     </div>
   )
 }

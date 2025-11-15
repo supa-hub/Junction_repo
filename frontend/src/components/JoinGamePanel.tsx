@@ -21,6 +21,7 @@ export function JoinGamePanel() {
 
       const sessionPayload: PlayerSession = {
         ...joinResponse,
+        ...(joinResponse.sessionStatus ? { sessionStatus: joinResponse.sessionStatus } : {}),
         nickname: form.nickname.trim(),
         classroomCode: form.code.trim(),
       }
