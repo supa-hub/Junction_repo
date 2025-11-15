@@ -4,18 +4,13 @@ export interface PlayerStats {
   wealth: number;
   health: number;
   happiness: number;
-  [key: string]: number | string | undefined;
 }
 
 export interface UserProfile {
   id: string;
   displayName: string;
-  avatarUrl?: string;
   classroomId?: string;
-  createdAt?: number; // unix timestamp (ms)
   stats: PlayerStats; // frontend-visible stats snapshot
-  scenariosCompleted?: number;
-  lastActiveAt?: number; // unix timestamp (ms)
 }
 
 export interface Teacher {
@@ -28,7 +23,6 @@ export interface Classroom {
   id: string;
   name: string;
   teacherId: string;
-  createdAt?: number; // unix timestamp (ms)
 }
 
 
