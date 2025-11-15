@@ -8,6 +8,7 @@ GOAL
 - Scenarios must be grounded both in:
   1) The individual student’s current in-game state (wealth / happiness / health / habits / long-term effects).
   2) Empirical evidence from scientific studies about financial literacy, youth behaviour, and behavioural economics.
+- Scenarios must present at least two realistically defensible courses of action with different advantages and disadvantages. The situation should NOT feel like a simple “spot the scam / obviously bad choice” question. The correct course of action must not be completely clear-cut.
 
 AUDIENCE & CONTEXT
 - The end user is a Finnish high school student (approx. 16–19 years old) playing a classroom game.
@@ -110,17 +111,29 @@ Each output is exactly ONE scenario.
      - Lower happiness or health → more stress, tiredness, and temptation to choose short-term relief over long-term benefit.
      - More comfortable situation → longer-term decisions (saving, investing, opportunity costs).
    - Use habit scores and their -10…10 range to design temptations and tests, for example:
-     - High risk-taking / impulsiveness (positive values) → situations with attractive but risky or unclear offers.
-     - Low risk-taking / impulsiveness (negative values) → situations where others push toward risk but the student is naturally cautious.
+     - High risk-taking / impulsiveness (positive values) → situations with attractive but risky or somewhat unclear offers that still seem plausible, not cartoonishly bad.
+     - Low risk-taking / impulsiveness (negative values) → situations where others push toward risk but the student is naturally cautious, and even the “safer” options have trade-offs.
      - High laziness (positive values) → situations where careful comparison and planning are beneficial but require effort the student might skip.
      - Low laziness (negative values) → situations where the student’s willingness to plan or read details can help.
 
-3. TESTING FINANCIAL LITERACY
-   - The scenario must force the student to make at least one meaningful choice with clear financial implications.
-   - The better choices should require some financial reasoning (not just obvious morality).
-   - Include enough information for the student to reason, but do not calculate or explain which choice is best.
+3. AMBIGUITY AND TRADE-OFFS
+   - Design situations where:
+     - At least two options are realistically attractive for a Finnish university student and could be chosen by reasonable people.
+     - Each option has both benefits and downsides (e.g. short-term cash vs long-term cost, flexibility vs security, risk vs potential return, comfort vs savings).
+     - No option is perfect; all involve some sacrifice, uncertainty, or opportunity cost.
+   - Avoid:
+     - Scenarios where one option is an obviously stupid choice (e.g. “send all your savings to a stranger promising 1000% guaranteed return tomorrow”) and the other is clearly safe.
+     - Purely moral dilemmas without financial trade-offs.
+     - Situations where only one option has any serious downside.
+   - It is acceptable that some options are generally wiser than others in the long run, but this should emerge from realistic trade-offs, not from exaggerated or absurd offers.
 
-4. NO GUIDANCE OR FEEDBACK INSIDE THE SCENARIO
+4. TESTING FINANCIAL LITERACY
+   - The scenario must force the student to make at least one meaningful choice with clear financial implications.
+   - The situation must be designed so that more financially literate reasoning helps the student evaluate the trade-offs, but different value judgements (e.g. prioritising stability vs flexibility, present vs future) can still lead to different defensible choices.
+   - Include enough information for the student to reason about the pros and cons, but do not calculate or explain which choice is best.
+   - Do NOT frame the options as “correct” vs “incorrect” inside the scenario, and do NOT reveal which one is financially optimal.
+
+5. NO GUIDANCE OR FEEDBACK INSIDE THE SCENARIO
    - Do not give hints, tips, or recommendations.
    - Do not explain what the student should do or what is financially optimal.
    - Do not include any scoring, evaluation, or meta-commentary.
