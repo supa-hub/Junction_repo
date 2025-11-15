@@ -21,7 +21,6 @@ object GameSimulationService:
     case InProgress extends SessionStatus("in_progress")
     case Completed extends SessionStatus("completed")
 
-  final case class AuthToken(teacherId: String, token: String, expiresInSeconds: Long)
   final case class SessionCreated(
     sessionId: String,
     sessionName: String,
@@ -148,7 +147,6 @@ object GameSimulationService:
   import io.circe.generic.semiauto.*
   import io.circe.{Decoder, Encoder}
 
-  given Encoder[AuthToken] = deriveEncoder
   given Encoder[SessionCreated] = deriveEncoder
   given Encoder[SessionSummary] = deriveEncoder
   given Encoder[SessionStarted] = deriveEncoder
@@ -172,12 +170,7 @@ object GameSimulationService:
   given Encoder[StudentInsights] = deriveEncoder
   given Encoder[HistoryRun] = deriveEncoder
   given Encoder[SessionHistory] = deriveEncoder
-
-  private val random = new Random()
-  private val sessions = TrieMap.empty[String, SessionState]
-  private val joinCodeIndex = TrieMap.empty[String, String]
-  private val teacherSessions = TrieMap.empty[String, Set[String]]
-
+  
   private val templates = Vector(
     ScenarioTemplate(
       key = "apartment_hunt_core",
@@ -191,18 +184,6 @@ object GameSimulationService:
     )
   )
 
-  def login(payload: LoginPayload): IO[Either[ServiceError, AuthToken]] =
-    DataBaseService
-      .getProfessorData[ProfessorUser](payload.email)
-      .map {
-        case Right(Some(professor)) if professor.password == payload.password =>
-          val teacherId = teacherIdFromEmail(payload.email)
-          val token = UUID.randomUUID().toString
-          Right(AuthToken(teacherId, token, expiresInSeconds = 3600))
-        case Right(Some(_)) => Left(BadRequest("Invalid email or password"))
-        case Right(None) => Left(NotFound("Professor not found"))
-        case Left(err) => Left(BadRequest(s"Unable to verify credentials: ${err.getMessage}"))
-      }
 
   def createSession(teacherId: String, sessionName: String, location: String, monthlyIncome: Number): IO[SessionCreated] = IO {
     val sessionId = generateId("sess")

@@ -2,6 +2,7 @@ package models.mongo
 
 import io.circe.*
 import io.circe.generic.semiauto.*
+import models.mongo.SessionStatus.Waiting
 import mongo4cats.bson.ObjectId
 import mongo4cats.circe.*
 import mongo4cats.codecs.MongoCodecProvider
@@ -10,27 +11,34 @@ import mongo4cats.bson.BsonValueEncoder
 import scala.util.Random
 
 
+enum SessionStatus(val apiValue: String):
+  case Waiting extends SessionStatus("waiting_for_start")
+  case InProgress extends SessionStatus("in_progress")
+  case Completed extends SessionStatus("completed")
+end SessionStatus
+
+
+final case class HistoryRun(
+  runId: String,
+  medianWealth: models.Number,
+  medianHabits: Map[String, models.Number]
+)
+
 final case class SessionMongo(
   _id: ObjectId,
   sessionName: String,
   sessionJoinCode: String,
-  students: List[StudentUserMongo]
+  location: String,
+  monthlyIncome: models.Number,
+  students: List[StudentUserMongo],
+  status: SessionStatus,
+  startedAt: Option[String],
+  scenarioCompletions: Map[String, Int],
+  historyRuns: List[HistoryRun]
 )
 
-object SessionMongo:
-  def generate(name: String, joinCode: String): SessionMongo =
-    SessionMongo(
-      _id = ObjectId.gen,
-      sessionName = name,
-      sessionJoinCode = joinCode,
-      students = List()
-    )
-
-  def generateCode: String =
-    Random
-      .alphanumeric
-      .take(6)
-      .mkString
+final case class ScenarioTemplate(key: String, title: String, narrative: String)
+final case class ScenarioState(id: String, template: ScenarioTemplate, turnsTaken: Int)
 
 final case class StudentStatsMongo(
   _id: ObjectId,
@@ -48,6 +56,7 @@ final case class StudentStatsMongo(
 final case class StudentUserMongo(
   _id: ObjectId = ObjectId.gen,
   userName: String,
+  currentScenario: Option[ScenarioState] = None,
   stats: StudentStatsMongo = StudentStatsMongo(
     _id = ObjectId.gen,
     wealth = 0,
@@ -84,6 +93,28 @@ final case class ProfessorUserMongo(
   email: String,
   password: String
 )
+
+object SessionMongo:
+  def generate(name: String, joinCode: String, location: String): SessionMongo =
+    SessionMongo(
+      _id = ObjectId.gen,
+      sessionName = name,
+      sessionJoinCode = joinCode,
+      students = List(),
+      status = Waiting,
+      startedAt = None,
+      scenarioCompletions = Map.empty,
+      historyRuns = List(),
+      location = location,
+      monthlyIncome = 0.0
+    )
+
+  def generateCode: String =
+    Random
+      .alphanumeric
+      .take(6)
+      .mkString
+end SessionMongo
 
 
 package circecoders:

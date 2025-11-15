@@ -42,16 +42,6 @@ object JsonRoutes:
       case Left(err) => Response[IO](status = err.status).withEntity(ErrorResponse(err.message)).pure[IO]
 
   val route = HttpRoutes.of[IO] {
-    case req @ POST -> Root / "api" / "auth" / "login" =>
-      req.attemptAs[LoginPayload]
-        .foldF(
-          err => BadRequest(ErrorResponse(s"Received data could not be decoded: ${err.getMessage}")),
-          payload =>
-            GameSimulationService
-              .login(payload)
-              .flatMap(result => handleServiceEither(result))
-        )
-
     case req @ POST -> Root / "api" / "teachers" / teacherId / "sessions" =>
       req.attemptAs[CreateTeacherSessionPayload]
         .foldF(

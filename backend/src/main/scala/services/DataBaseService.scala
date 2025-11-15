@@ -193,7 +193,16 @@ object DataBaseService:
       .attempt
 
 
-  def addSession[A](email: String, aSessionName: String)(using Conversion[A, SessionMongo]): IO[Either[Throwable, Option[String]]] =
+  /**
+   * Creates a new session
+   * @param email
+   * @param aSessionName
+   * @param location
+   * @param x$4
+   * @tparam A
+   * @return
+   */
+  def addSession[A](email: String, aSessionName: String, location: String)(using Conversion[A, SessionMongo]): IO[Either[Throwable, Option[String]]] =
     val filter = userFilter(email)
 
     // find a session join code that isn't used yet
@@ -215,7 +224,7 @@ object DataBaseService:
     (sessionCode, professorSessionCollection)
       .parTupled
       .flatMap((code, collection) =>
-        val data = SessionMongo.generate(aSessionName, code)
+        val data = SessionMongo.generate(aSessionName, code, location)
         collection.insertOne(ProfessorSessionMongo.generate(email, data))
       )
       .map(res => Option(res.getInsertedId))
