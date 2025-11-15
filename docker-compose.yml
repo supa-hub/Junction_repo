@@ -24,6 +24,9 @@ services:
 =======
       ME_CONFIG_MONGODB_URL: mongo://root:example@mongo:27017/
       ME_CONFIG_BASICAUTH_ENABLED: "true"
+<<<<<<< HEAD
+>>>>>>> 21a881c (backend schaice)
+=======
 >>>>>>> 21a881c (backend schaice)
       ME_CONFIG_BASICAUTH_USERNAME: root
       ME_CONFIG_BASICAUTH_PASSWORD: example
