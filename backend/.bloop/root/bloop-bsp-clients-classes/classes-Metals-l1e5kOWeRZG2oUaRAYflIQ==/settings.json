@@ -1,0 +1,11 @@
+{
+  "isSRV": false,
+  "username": null,
+  "password": null,
+  "clusterName": null,
+  "databaseName": "junctionDB",
+  "userCollectionName": "professorDataColl",
+  "sessionCollectionName": "professorSessionDataColl",
+  "adminUserName": null,
+  "adminPassword": null
+}

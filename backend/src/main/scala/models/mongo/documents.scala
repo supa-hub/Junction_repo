@@ -37,7 +37,12 @@ final case class StudentStatsMongo(
   wealth: models.Number,
   health: models.Number,
   happiness: models.Number,
+  riskTaking: models.Number,
+  overTrusting: models.Number,
+  laziness: models.Number,
+  impulsiveness: models.Number,
   scenariosDone: List[String],
+  longTermEffects: List[String]
 )
 
 final case class StudentUserMongo(
@@ -48,7 +53,12 @@ final case class StudentUserMongo(
     wealth = 0,
     health = 0,
     happiness = 0,
-    scenariosDone = List()
+    riskTaking = 0,
+    overTrusting = 0,
+    laziness = 0,
+    impulsiveness = 0,
+    scenariosDone = List(),
+    longTermEffects = List()
   )
 )
 
