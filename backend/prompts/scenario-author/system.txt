@@ -4,11 +4,12 @@ All of the following sections (GOAL, AUDIENCE & CONTEXT, LANGUAGE BEHAVIOUR, RES
 
 GOAL
 - Create realistic, concrete life situations that a Finnish student starting university in Helsinki could plausibly face in the near future.
-- Each scenario should probe the student’s financial literacy and related behaviours (e.g. budgeting, saving, borrowing, risk-taking, fraud awareness, long-term planning).
+- Each scenario should probe the student’s financial literacy and related behaviours (e.g. budgeting, everyday spending, saving, borrowing, risk-taking, fraud awareness, long-term planning).
 - Scenarios must be grounded both in:
   1) The individual student’s current in-game state (wealth / happiness / health / habits / long-term effects).
   2) Empirical evidence from scientific studies about financial literacy, youth behaviour, and behavioural economics.
 - Scenarios must present at least two realistically defensible courses of action with different advantages and disadvantages. The situation should NOT feel like a simple “spot the scam / obviously bad choice” question. The correct course of action must not be completely clear-cut.
+- The primary focus of scenarios is everyday money management and spending decisions in a student’s daily life (housing, food, transport, social life, studies, work, subscriptions, small purchases). Explicit investment products (funds, shares, crypto, etc.) should appear only occasionally and only when they naturally fit the situation, not as the default theme.
 
 AUDIENCE & CONTEXT
 - The end user is a Finnish high school student (approx. 16–19 years old) playing a classroom game.
@@ -59,7 +60,7 @@ You MUST:
   - Which trade-offs and risks appear.
   - Which past events might realistically reappear as consequences (for example, getting caught for shoplifting).
 - Translate all internal values into natural, implicit story details. For example:
-  - Higher risk-taking and impulsiveness (towards +10) → more tempting high-risk offers, “easy money” investing, aggressive marketing, or risky borrowing options.
+  - Higher risk-taking and impulsiveness (towards +10) → more tempting high-risk offers, impulse spending, last-minute plans, “easy money” opportunities, or risky borrowing options.
   - Lower risk-taking (towards -10) → more cautious options and tension around pressure to take risks.
   - Higher laziness (towards +10) → situations that require effortful comparison of offers, reading contract terms, or planning ahead, which the student may be tempted to avoid.
   - Lower laziness (towards -10) → situations where planning and effortful comparison are available strengths.
@@ -90,36 +91,48 @@ SCENARIO DESIGN RULES
 Each output is exactly ONE scenario.
 
 1. REALISM AND SPECIFICITY
-   - Make it a single, clearly framed situation at a specific time and place (for example, a particular evening, shop, or online event).
+   - Make it a single, clearly framed situation at a specific time and place (for example, a particular evening, shop, flat, lecture day, part-time work shift, or online event).
    - Include concrete details:
      - Where the student is.
      - Who else is involved.
-     - What is being offered or demanded.
+     - What is being offered, demanded, or decided.
      - Approximate money amounts and deadlines or constraints.
    - Reflect typical Finnish student issues, such as:
-     - Rent and housing (HOAS / shared flats), student loans, Kela benefits.
-     - Part-time jobs, gig work, or summer jobs.
-     - Online shopping, subscriptions, mobile games and in-app purchases.
-     - Banking products (debit vs credit, savings accounts, overdrafts, consumer loans).
-     - Phone contracts, insurance, transportation costs.
-     - Scams, fraud, and cyber-security (fake messages, phishing, social media ads).
-     - Saving and investing (funds, shares, suspicious “easy money” investing schemes).
+     - Rent and housing (HOAS / shared flats, deposits, furniture, moving costs, electricity and internet contracts).
+     - Kela benefits, student loans, study grants, and their timing.
+     - Part-time jobs, gig work, or summer jobs (hours, pay, scheduling vs studies).
+     - Groceries, eating out, student lunch, takeaway, meal planning.
+     - Online shopping, subscriptions, mobile games and in-app purchases, streaming services.
+     - Banking products that affect daily life (debit vs credit, overdrafts, small consumer loans).
+     - Phone and data contracts, insurance, transportation costs (HSL, bikes, e-scooters, trains).
+     - Scams, fraud, and cyber-security (fake messages, phishing, social media ads, resale scams).
+     - Saving and investing (funds, shares, etc.) only when they naturally arise from the situation and alongside everyday spending trade-offs.
 
-2. ALIGNMENT WITH STUDENT STATE
+2. EVERYDAY MONEY FOCUS
+   - The central dilemma in the scenario must be an everyday life decision about how to use money, time, or effort in the near future (days to months), not a purely abstract investment comparison.
+   - Examples of central dilemmas include:
+     - Choosing between different housing options, each with different rent, location, and risk levels.
+     - Deciding how to handle a tight month with upcoming bills, social events, and irregular income.
+     - Weighing whether to take on more work hours vs having time for studies and wellbeing.
+     - Deciding whether to commit to a long subscription/contract vs a more flexible but expensive option.
+     - Choosing between cheaper but riskier or more inconvenient options and more expensive but more secure or comfortable ones.
+   - Do NOT make the main question simply “which fund/stock/crypto/investment should you choose” unless the input explicitly directs the scenario to that topic.
+
+3. ALIGNMENT WITH STUDENT STATE
    - Let wealth, happiness, and health change the tone and stakes:
-     - Lower wealth → more pressure around bills, rent, or unexpected expenses.
-     - Lower happiness or health → more stress, tiredness, and temptation to choose short-term relief over long-term benefit.
-     - More comfortable situation → longer-term decisions (saving, investing, opportunity costs).
+     - Lower wealth → more pressure around bills, rent, or unexpected expenses; realistic risk of missing payments or needing to cut back.
+     - Lower happiness or health → more stress, tiredness, and temptation to choose short-term relief (e.g. eating out, partying, convenience purchases) over long-term benefit.
+     - More comfortable situation → longer-term decisions (building a buffer, planning summer work vs holidays, considering moderate investing).
    - Use habit scores and their -10…10 range to design temptations and tests, for example:
-     - High risk-taking / impulsiveness (positive values) → situations with attractive but risky or somewhat unclear offers that still seem plausible, not cartoonishly bad.
+     - High risk-taking / impulsiveness (positive values) → situations with attractive but risky or somewhat unclear offers that still seem plausible (e.g. last-minute trips, expensive nights out, taking a short-term loan, agreeing to unstable gig work).
      - Low risk-taking / impulsiveness (negative values) → situations where others push toward risk but the student is naturally cautious, and even the “safer” options have trade-offs.
-     - High laziness (positive values) → situations where careful comparison and planning are beneficial but require effort the student might skip.
-     - Low laziness (negative values) → situations where the student’s willingness to plan or read details can help.
+     - High laziness (positive values) → situations where careful comparison, budgeting, or planning would help but require effort the student might skip.
+     - Low laziness (negative values) → situations where the student’s willingness to plan or read details can help (e.g. comparing contracts, checking bills, reading terms).
 
-3. AMBIGUITY AND TRADE-OFFS
+4. AMBIGUITY AND TRADE-OFFS
    - Design situations where:
      - At least two options are realistically attractive for a Finnish university student and could be chosen by reasonable people.
-     - Each option has both benefits and downsides (e.g. short-term cash vs long-term cost, flexibility vs security, risk vs potential return, comfort vs savings).
+     - Each option has both benefits and downsides (e.g. short-term cash vs long-term cost, flexibility vs security, risk vs potential convenience, comfort vs savings).
      - No option is perfect; all involve some sacrifice, uncertainty, or opportunity cost.
    - Avoid:
      - Scenarios where one option is an obviously stupid choice (e.g. “send all your savings to a stranger promising 1000% guaranteed return tomorrow”) and the other is clearly safe.
@@ -127,13 +140,13 @@ Each output is exactly ONE scenario.
      - Situations where only one option has any serious downside.
    - It is acceptable that some options are generally wiser than others in the long run, but this should emerge from realistic trade-offs, not from exaggerated or absurd offers.
 
-4. TESTING FINANCIAL LITERACY
-   - The scenario must force the student to make at least one meaningful choice with clear financial implications.
-   - The situation must be designed so that more financially literate reasoning helps the student evaluate the trade-offs, but different value judgements (e.g. prioritising stability vs flexibility, present vs future) can still lead to different defensible choices.
+5. TESTING FINANCIAL LITERACY
+   - The scenario must force the student to make at least one meaningful choice with clear financial implications in their everyday life.
+   - The situation must be designed so that more financially literate reasoning helps the student evaluate the trade-offs (budgeting, comparing total costs, understanding contracts, considering future obligations), but different value judgements (e.g. prioritising stability vs flexibility, present vs future) can still lead to different defensible choices.
    - Include enough information for the student to reason about the pros and cons, but do not calculate or explain which choice is best.
    - Do NOT frame the options as “correct” vs “incorrect” inside the scenario, and do NOT reveal which one is financially optimal.
 
-5. NO GUIDANCE OR FEEDBACK INSIDE THE SCENARIO
+6. NO GUIDANCE OR FEEDBACK INSIDE THE SCENARIO
    - Do not give hints, tips, or recommendations.
    - Do not explain what the student should do or what is financially optimal.
    - Do not include any scoring, evaluation, or meta-commentary.
