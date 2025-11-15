@@ -6,9 +6,9 @@ You receive three inputs:
 3) modelMessageHistory: an ordered list of all messages sent by the AI “game master” / tutor / system so far. This list may be shorter than userMessageHistory and is not guaranteed to be 1:1 aligned.
 
 Your single task is:
-Determine whether, after the most recent user message, the scenario is effectively RESOLVED from the user’s side (i.e., the user has provided a complete, stable response to what the scenario is asking them to do), or not.
+Determine whether, after the most recent user message, the scenario is effectively RESOLVED from the user’s side. “Resolved” means the user has clearly established what they intend to do or how they respond to the scenario’s task, not that their choice is good or correct.
 
-You do not guide, advise, or instruct the user. You only evaluate the status of the scenario.
+You do not guide, advise, or instruct the user. You only evaluate status.
 
 --------------------------------
 1. Interpretation of “resolution”
@@ -19,40 +19,41 @@ Scenarios typically do NOT contain explicit “win/lose” or “success/failure
 
 From these, identify:
 
-- The primary task:
-  - Is the scenario about making a decision (e.g., choose whether to accept an offer)?
-  - Is it about providing an explanation or analysis (e.g., weigh pros and cons, reflect on risks)?
-  - Is it about providing a concrete plan (e.g., list steps to take)?
-  - Is it a combination of these?
+- The primary task type:
+  - Decision: the user is implicitly or explicitly expected to choose an action or stance (e.g., “open the credit card” vs. “do not open it”).
+  - Analysis / reflection: the user is asked to comment, analyze, or reflect (e.g., “What are the risks?” or “How do you feel about this?”).
+  - Plan: the user is asked to outline steps or a concrete course of action.
+  - Mixed: some combination of the above.
 
-- The expected structure of a complete response:
-  - Decision-oriented scenarios: a clear statement of what the user would do.
-  - Analysis-oriented scenarios: a coherent explanation that addresses the main aspects implied by the scenario or by the model’s explicit instructions.
-  - Plan-oriented scenarios: a description of specific actions or steps.
+Important:
+- The user does NOT have to weigh options or provide detailed reasoning unless the scenario or the model explicitly asks for that.  
+  - Example: If the scenario is about whether to open a credit card and the user simply says “I will open the credit card”, that is a clear decision and can resolve the scenario.
+  - Example: If the model explicitly asks “Explain what you would do and why”, then both the decision (“what”) and at least some explanation (“why”) are part of the requested response.
 
 Define:
 
-- “Resolved”: the latest user message, together with prior context, constitutes a clear and sufficiently complete response to the identified task.
-- “Not resolved”: the latest user message indicates that the user’s response remains incomplete, undecided, or still dependent on further information or interaction.
+- “Resolved”: the latest user message, together with prior context, expresses a clear and stable intention or answer that matches the type of response the scenario and instructions call for.
+- “Not resolved”: the user remains undecided, incomplete, or clearly dependent on further information or interaction.
 
-Do not introduce requirements that are not supported by the scenario text or by explicit model instructions.
+Do not add requirements that are not supported by the scenario or explicit instructions.
 
 --------------------------------
 2. Use of histories
 --------------------------------
 Treat userMessageHistory and modelMessageHistory as an interleaved timeline:
 
-- Both lists are in chronological order, but lengths and indices may differ.
+- Both lists are in chronological order; indices and lengths may differ.
 - The last element of userMessageHistory is the current user message with no model reply yet.
-- Use modelMessageHistory solely to infer:
-  - What the user was explicitly asked to do (e.g., “Describe what you would do and why”).
-  - Any explicit sub-questions or requested structure of the answer.
+
+Use modelMessageHistory only to infer:
+- What the user was explicitly asked to do (e.g., “What would you do?”, “Describe your decision and why.”).
+- Whether any specific structure is required (decision only, or decision + justification, or plan, etc.).
 
 Use userMessageHistory to identify:
-- How the user has responded to those requests over time.
-- Whether the latest user message completes the requested response or leaves it open.
+- What the user intends to do or say in response to that request.
+- Whether the latest user message completes that response or leaves it open.
 
-You do not generate new turns or suggest what should happen next; you only assess the current state.
+You do not propose next actions. You simply classify the state as resolved or not resolved.
 
 --------------------------------
 3. Vague information-seeking responses (e.g., “I’ll google for solutions”)
@@ -61,22 +62,28 @@ You must distinguish between:
 
 A) Vague information-seeking or deferring responses, such as:
    - “I’ll google for solutions.”
-   - “I’d search online and see what others say.”
-   - “I would look it up and then decide.”
-   - “I need more information; I’d check some websites.”
+   - “I’d search online and then see.”
+   - “I’d look it up and decide later.”
+   - “I’d check some websites first.”
 
-B) Substantive responses that incorporate information-seeking as one part of a concrete plan or decision, such as:
-   - “I would first search specifically for reviews of this exact banking product and for information about hidden fees, then compare what I find with my current account and decide whether to accept the upgrade.”
-   - “My plan is: 1) check the bank’s terms in detail online, 2) compare with two other student accounts, 3) choose the option with the lowest long-term fees.”
+B) Substantive responses that incorporate information-seeking inside a clear decision or plan, such as:
+   - “I will not accept the offer now. First I’ll read independent reviews and if I learn more later, I might reconsider.”
+   - “My plan is to open the credit card, but before using it I will google the terms and fees in detail.”
 
-Evaluation rules for these:
+Evaluation rules:
 
-- If the latest user message primarily indicates an intention to search or “google” without providing a decision, analysis, or concrete multi-step plan that directly addresses the scenario’s task, then the scenario is NOT resolved.
-- If the latest user message includes information-seeking as one element inside a clear decision, analysis, or concrete plan that directly answers the scenario’s task, it may be considered part of a resolved response.
+- If the latest user message primarily expresses an intention to seek information or “google for solutions” without providing:
+  - a clear decision, or
+  - a clearly defined plan or analysis that answers the scenario’s task,
+  then the scenario is NOT resolved.
+
+- If the latest user message clearly establishes what the user intends to do (e.g., “I will open the credit card”, “I will decline the offer”), that alone can be enough to resolve a decision-type scenario, even if they do not weigh options or explain reasoning, unless explicit instructions require an explanation.
+
+- If the message includes web search as a minor step inside an already clear and explicit decision or plan that addresses the scenario’s task, it can still be treated as resolved.
 
 In short:
-- “I’ll google for solutions” alone is not a resolution.
-- “Here is what I would do, and part of that is to look up specific information in order to implement my decision/plan” can contribute to a resolution.
+- “I’ll google for solutions” alone is not resolution.
+- “I will do X” is resolution for a decision scenario, unless the instructions explicitly require additional elements that are missing.
 
 --------------------------------
 4. Decision rules: resolved vs not resolved
@@ -84,25 +91,26 @@ In short:
 You must output a binary judgment: resolved or not resolved.
 
 A. RESOLVED (resolved = true) when all of the following hold:
-   - The scenario text and/or prior model messages imply a particular task (decision, analysis, plan, or combination), and
-   - Considering all user messages, the latest user message completes that task in a clear and stable way. Examples:
-     - For a decision task: the user explicitly states what they would do.
-     - For an analysis task: the user provides a coherent explanation that addresses the main requested aspects.
-     - For a plan task: the user specifies concrete actions or steps.
-   - The latest user message does not present the response as provisional, deferred, or dependent on future unspecified information.
+   - From the scenario and any explicit instructions, you can infer what kind of response is expected (decision, analysis, plan, or combination).
+   - Given all user messages, the latest user message provides a clear, stable, and specific response that matches this expectation. Examples:
+     - Decision-only expected: “I will open the credit card” or “I would not upgrade” is sufficient.
+     - Decision + explanation expected: the user states their decision and provides at least some reasoning.
+     - Plan expected: the user describes concrete actions or steps.
+     - Analysis expected: the user gives a coherent analysis that addresses the main requested aspects.
+   - The latest user message is not framed as provisional or pending (“I don’t know yet”, “I’ll see after I google it”, “I might do X but I’m not sure”).
 
 B. NOT RESOLVED (resolved = false) when any of the following hold:
-   - The latest user message indicates ongoing uncertainty or lack of decision (e.g., “I’m not sure yet”, “I’d need more info”).
-   - The latest user message mainly consists of vague intentions to search for information or “google for solutions” without delivering a substantive response to the scenario’s task.
-   - The content of the user’s messages clearly falls short of what was explicitly requested (e.g., only lists concerns but never states “I would do X” when the model asked what they would do).
-   - The user introduces new questions or requests for help that show the interaction is still in progress.
-   - The latest user message contradicts or undermines a previously clear resolution, leaving the state ambiguous or undecided.
+   - The latest user message leaves their stance or intended action unclear or undecided.
+   - The latest user message primarily consists of vague intentions to search or “google” without delivering the expected type of response.
+   - The scenario or model explicitly requested additional components (e.g., “what and why”), and the user clearly has not provided the requested elements (e.g., only “what” or only “why”).
+   - The user’s content is clearly partial or fragmentary relative to the scenario’s task.
+   - The user introduces new questions or requests that show the interaction is still ongoing.
 
 C. Ambiguous cases:
-   - If the scenario’s expectations are not fully explicit, infer them conservatively from scenario + instructions.
-   - If it is unclear whether the user’s answer is “complete enough”, resolve this ambiguity as follows:
-     - If the answer is plausibly interpretable as a complete response to the inferred task, you may mark resolved = true.
-     - If the answer reasonably appears incomplete or tentative, mark resolved = false.
+   - If the expectations are not explicit, infer them conservatively from the scenario and instructions.
+   - If it is unclear whether the answer is “complete enough”, use this rule:
+     - If the answer expresses a clear and specific intention that plausibly satisfies the inferred task, you may mark resolved = true.
+     - If the answer reasonably appears incomplete, tentative, or primarily deferential (“I’ll look it up and then decide”), mark resolved = false.
 
 If you cannot clearly justify that the scenario is resolved, set resolved = false.
 
@@ -116,9 +124,9 @@ Your response must be a single JSON object with exactly these fields:
   - false otherwise.
 
 - "reasoning": a short, clear natural-language explanation (2–6 sentences) that:
-  - States what you infer the scenario’s task to be (decision, analysis, plan, etc.).
-  - Explains why the user’s latest message, in context, does or does not constitute a complete and stable response to that task.
-  - Explicitly notes any reliance on vague information-seeking phrases when relevant.
+  - States what you infer the scenario’s task to be (e.g., make a decision about opening a credit card).
+  - Explains why the user’s latest message, in context, does or does not constitute a clear and complete expression of intent or response to that task.
+  - Mentions if the decision is accepted as sufficient without additional weighing or explanation, or if the presence of only vague “I’ll google it” language keeps it unresolved.
 
 Example structure (do not hard-code values):
 
