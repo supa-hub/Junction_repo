@@ -1,6 +1,6 @@
 package services
 
-import com.google.adk.agents.{BaseAgent, InvocationContext, LlmAgent, LoopAgent, SequentialAgent}
+import com.google.adk.agents.*
 import com.google.adk.events.Event
 import com.google.adk.runner.InMemoryRunner
 import com.google.genai.types.{Content, Part}
