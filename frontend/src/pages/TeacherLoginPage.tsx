@@ -38,6 +38,12 @@ export function TeacherLoginPage() {
           </Button>
         </form>
 
+        <div className="mt-4">
+          <Button variant="outline" className="w-full border-white/20 text-white" asChild>
+            <Link to="/teacher/dashboard">Preview live dashboard</Link>
+          </Button>
+        </div>
+
         <p className="mt-6 text-center text-xs text-slate-500">
           Need an instructor account? <span className="text-white">Contact the SupaHub team.</span>
         </p>
