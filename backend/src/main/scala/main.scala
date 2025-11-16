@@ -39,7 +39,7 @@ object Main extends IOApp:
       .policy
       .withAllowOriginAll
       .withAllowHeadersIn(allowedHeaders)
-      .withAllowMethodsIn(allowedMethods)
+      .withAllowMethodsAll
       .withMaxAge(1.day)
 
     val httpApp = Router("/" -> services).orNotFound

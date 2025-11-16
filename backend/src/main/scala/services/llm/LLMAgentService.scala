@@ -170,7 +170,7 @@ final class FinancialLiteracyAgent(
       .builder()
       .author(name)
       .content(Content.fromParts(Part.fromText(text)))
-      .finalResponse(java.lang.Boolean.TRUE)
+      .turnComplete(true)
       .build()
 
   private def getString(state: java.util.Map[String, Object], key: String): String =
