@@ -25,6 +25,8 @@ import models.json.http4sencoders.given
 import org.http4s.*
 import org.http4s.dsl.io.*
 import org.http4s.headers.Authorization
+import org.http4s.AuthScheme
+import org.http4s.Credentials.Token
 import org.http4s.server.AuthMiddleware
 import services.{DataBaseService, GameSimulationService, JWTService}
 import models.implicitconversions.given
@@ -62,6 +64,7 @@ object JsonRoutes:
       .get[Authorization]
       .toRight("Authorization parsing error")
       .flatMap {
+        case Authorization(Token(AuthScheme.Bearer, token)) => JWTService.decode(token).toEither.leftMap(_.getMessage)
         case Authorization(BasicCredentials(creds)) => JWTService.decode(creds._2).toEither.leftMap(_.getMessage)
         case _ => Left("Couldn't decode auth header")
       }
@@ -69,17 +72,21 @@ object JsonRoutes:
 
     jwtClaim
       .flatMap(claim =>
-        DataBaseService
-          .getProfessorData[ProfessorUser](claim.content)
-          .toEitherT
-          .biflatMap[String, ProfessorUser](
-            err => EitherT.leftT(err.getMessage),
-            user => EitherT
-                .right(user)
-                .leftMap(_ => "Couldn't find user")
-                .value
-                .getOrElse(Either.left("Couldn't find user"))
-                .toEitherT[IO]
+        EitherT
+          .fromEither[IO](JWTService.extractEmail(claim))
+          .flatMap(email =>
+            DataBaseService
+              .getProfessorData[ProfessorUser](email)
+              .toEitherT
+              .biflatMap[String, ProfessorUser](
+                err => EitherT.leftT(err.getMessage),
+                user => EitherT
+                    .right(user)
+                    .leftMap(_ => "Couldn't find user")
+                    .value
+                    .getOrElse(Either.left("Couldn't find user"))
+                    .toEitherT[IO]
+              )
           )
       )
       .value
