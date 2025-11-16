@@ -145,8 +145,10 @@ object JsonRoutes:
         )
 
     case GET -> Root / "api" / "teachers" / "sessions" as user =>
-      val stream = getTeacherSessionsSummary(user.email)
-      Ok(stream)
+      getTeacherSessionsSummary(user.email)
+        .compile
+        .toList
+        .flatMap(list => Ok(list))
 
     case req @ POST -> Root / "api" / "sessions" / joinCode / "students" as user =>
       req.req

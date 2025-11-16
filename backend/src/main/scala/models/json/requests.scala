@@ -161,6 +161,7 @@ package http4sencoders:
   import org.http4s.EntityEncoder
   import org.http4s.circe.jsonEncoderOf
   given sessionSummaryEncoder: EntityEncoder[IO, SessionSummary] = jsonEncoderOf
+  given sessionSummaryListEncoder: EntityEncoder[IO, List[SessionSummary]] = jsonEncoderOf
   given statsEncoder: EntityEncoder[IO, StudentStats] = jsonEncoderOf
   given habitsEncoder: EntityEncoder[IO, StudentHabits] = jsonEncoderOf
   given userEncoder: EntityEncoder[IO, StudentUser] = jsonEncoderOf
