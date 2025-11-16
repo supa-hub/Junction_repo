@@ -4,201 +4,323 @@ import com.google.adk.agents.*
 import com.google.adk.events.Event
 import com.google.adk.runner.InMemoryRunner
 import com.google.genai.types.{Content, Part}
-import io.reactivex.rxjava3.core.Flowable
+import io.reactivex.rxjava3.core.{Completable, Flowable}
 
 import java.util.Optional
 import java.util.concurrent.ConcurrentHashMap
 import java.util.logging.{Level, Logger}
 import scala.jdk.CollectionConverters.*
+import scala.jdk.OptionConverters.*
 
-
-final class StoryFlowAgent(
+final class FinancialLiteracyAgent(
   name: String,
-  private val storyGenerator: LlmAgent,
-  private val loopAgent: LoopAgent,
-  private val sequentialAgent: SequentialAgent
-) extends BaseAgent(name, "Orchestrates story generation, critique, revision, and checks.", List(storyGenerator, loopAgent, sequentialAgent).asJava, null, null):
+  private val scenarioAgent: LlmAgent,
+  private val refinerAgent: LlmAgent,
+  private val praiseAgent: LlmAgent,
+  private val rejectAgent: LlmAgent
+) extends BaseAgent(
+      name,
+      "Guides the user through financial literacy scenarios and structured feedback.",
+      List(scenarioAgent).asJava,
+      null,
+      null
+    ):
+
+  private val defaultState: Map[String, AnyRef] = Map(
+    "scenario_question" -> "",
+    "awaiting_answer" -> java.lang.Boolean.FALSE,
+    "user_answer" -> "",
+    "refined_answer" -> "",
+    "praise_feedback" -> "",
+    "rejection_feedback" -> ""
+  )
 
   override def runAsyncImpl(invocationContext: InvocationContext): Flowable[Event] =
-    // Stage 1. Initial Story Generation
-    val storyGenFlow = storyGenerator.runAsync(invocationContext)
+    Flowable.defer(() =>
+      val state = ensureState(invocationContext)
+      val hasScenario = getString(state, "scenario_question").nonEmpty
+      val awaitingAnswer = getBoolean(state, "awaiting_answer")
 
-    // Stage 2: Critic-Reviser Loop (runs after story generation completes)
-    val criticReviserFlow = loopAgent.runAsync(invocationContext)
-
-    // Stage 3: Post-Processing (runs after critic-reviser loop completes)
-    val postProcessingFlow = sequentialAgent.runAsync(invocationContext)
-
-    // Stage 4: Conditional Regeneration (runs after post-processing completes)
-    val conditionalRegenFlow = Flowable.defer(() =>
-      val toneCheckResult: String = invocationContext
-        .session()
-        .state()
-        .get("tone_check_result")
-        .toString
-
-      if "negative".equalsIgnoreCase(toneCheckResult) then
-        storyGenerator.runAsync(invocationContext)
+      if !hasScenario then
+        runScenarioPrompt(invocationContext)
+      else if awaitingAnswer then
+        handleAwaitingAnswer(invocationContext)
       else
-        Flowable.empty()
+        runScenarioPrompt(invocationContext)
     )
 
-    Flowable.concatArray(storyGenFlow, criticReviserFlow, postProcessingFlow, conditionalRegenFlow)
+  override def runLiveImpl(invocationContext: InvocationContext): Flowable[Event] =
+    Flowable.error(new UnsupportedOperationException("Live mode not implemented for FinancialLiteracyAgent."))
 
-  override def runLiveImpl(invocationContext: InvocationContext): Flowable[Event] = ???
+  private def ensureState(ctx: InvocationContext) =
+    val state = ctx.session().state()
+    defaultState.foreach { case (key, value) =>
+      state.putIfAbsent(key, value)
+    }
+    state
 
-end StoryFlowAgent
+  private def runScenarioPrompt(ctx: InvocationContext): Flowable[Event] =
+    val state = ctx.session().state()
+    runAgentAndCapture(scenarioAgent, ctx, text => {
+      setString(state, "scenario_question", text)
+      setString(state, "user_answer", "")
+      setString(state, "refined_answer", "")
+      setString(state, "praise_feedback", "")
+      setString(state, "rejection_feedback", "")
+      setAwaiting(state, value = true)
+    }).andThen(
+      Flowable.fromCallable(() => {
+        val question = getString(state, "scenario_question")
+        val response =
+          s"""Here is your financial literacy scenario:
+             |$question
+             |Reply with your plan so I can help refine it.""".stripMargin
+        buildResponseEvent(response)
+      })
+    )
 
+  private def handleAwaitingAnswer(ctx: InvocationContext): Flowable[Event] =
+    latestUserText(ctx) match
+      case Some(answer) => runReviewFlow(ctx, answer)
+      case None =>
+        Flowable.fromCallable(() =>
+          buildResponseEvent("Please share how you would handle the scenario so I can help iterate on it.")
+        )
 
-// get class name
+  private def runReviewFlow(ctx: InvocationContext, answer: String): Flowable[Event] =
+    val state = ctx.session().state()
+    setString(state, "user_answer", answer)
+
+    val steps = List(
+      runAgentAndCapture(refinerAgent, ctx, text => setString(state, "refined_answer", text)),
+      runAgentAndCapture(praiseAgent, ctx, text => setString(state, "praise_feedback", text)),
+      runAgentAndCapture(rejectAgent, ctx, text => setString(state, "rejection_feedback", text))
+    )
+
+    Completable
+      .concat(steps.asJava)
+      .andThen(
+        Flowable.fromCallable(() => {
+          val scenario = getString(state, "scenario_question")
+          val improved = fallback(getString(state, "refined_answer"), "I could not improve the answer.")
+          val praise = fallback(getString(state, "praise_feedback"), "I did not identify any strengths.")
+          val rejection =
+            fallback(getString(state, "rejection_feedback"), "I did not identify any major risks to your plan.")
+
+          setAwaiting(state, value = false)
+          setString(state, "scenario_question", "")
+          setString(state, "user_answer", "")
+          setString(state, "refined_answer", "")
+          setString(state, "praise_feedback", "")
+          setString(state, "rejection_feedback", "")
+
+          val response =
+            s"""Thanks for sharing your plan.
+               |Scenario: $scenario
+               |Improved response:
+               |$improved
+               |What worked well:
+               |$praise
+               |Potential concerns:
+               |$rejection
+               |Let me know if you want another scenario.""".stripMargin
+
+          buildResponseEvent(response)
+        })
+      )
+
+  private def runAgentAndCapture(agent: LlmAgent, ctx: InvocationContext, onText: String => Unit): Completable =
+    tapFinalText(agent.runAsync(ctx))(text => onText(text.trim))
+      .ignoreElements()
+
+  private def tapFinalText(flowable: Flowable[Event])(onText: String => Unit): Flowable[Event] =
+    flowable.doOnNext(event =>
+      if event.finalResponse() then
+        extractText(event).foreach(text => onText(text.trim))
+    )
+
+  private def extractText(event: Event): Option[String] =
+    event
+      .content()
+      .toScala
+      .flatMap(content =>
+        content.parts().toScala.flatMap(parts =>
+          parts.asScala.collectFirst {
+            case part if part.text().isPresent => part.text().get()
+          }
+        )
+      )
+      .map(_.trim)
+      .filter(_.nonEmpty)
+
+  private def latestUserText(ctx: InvocationContext): Option[String] =
+    Option(ctx.session())
+      .flatMap(session => Option(session.events()))
+      .map(_.asScala.toList)
+      .getOrElse(Nil)
+      .reverse
+      .collectFirst {
+        case event if Option(event.author()).exists(_.equalsIgnoreCase("user")) =>
+          extractText(event)
+      }
+      .flatten
+
+  private def buildResponseEvent(text: String): Event =
+    Event
+      .builder()
+      .author(name)
+      .content(Content.fromParts(Part.fromText(text)))
+      .finalResponse(java.lang.Boolean.TRUE)
+      .build()
+
+  private def getString(state: java.util.Map[String, Object], key: String): String =
+    Option(state.get(key)).map(_.toString).getOrElse("")
+
+  private def getBoolean(state: java.util.Map[String, Object], key: String): Boolean =
+    Option(state.get(key)) match
+      case Some(value: java.lang.Boolean) => value
+      case Some(other)                    => java.lang.Boolean.parseBoolean(other.toString)
+      case None                           => false
+
+  private def setString(state: java.util.Map[String, Object], key: String, value: String): Unit =
+    state.put(key, Option(value).map(_.trim).getOrElse(""))
+
+  private def setAwaiting(state: java.util.Map[String, Object], value: Boolean): Unit =
+    state.put("awaiting_answer", java.lang.Boolean.valueOf(value))
+
+  private def fallback(value: String, defaultValue: String): String =
+    if value == null || value.trim.isEmpty then defaultValue else value
+
+end FinancialLiteracyAgent
+
 def className[A](using m: Manifest[A]) = m.toString
 
-
 object LLMAgentService:
-  // --- Constants ---
-  private val APP_NAME = "story_app";
-  private val USER_ID = "user_12345";
-  private val SESSION_ID = "session_123344";
-  private val MODEL_NAME = "gemini-2.0-flash"; // Ensure this model is available
-  private val iterCount = 10
+  private val APP_NAME = "financial_app"
+  private val USER_ID = "12345"
+  private val SESSION_ID = "financial-session"
+  private val MODEL_NAME = "gemini-2.5-flash"
 
-  private val logger = Logger.getLogger(className[StoryFlowAgent])
+  private val logger = Logger.getLogger(className[FinancialLiteracyAgent])
 
-  val storyGenerator: LlmAgent =
+  private val answerPraiseAgent: LlmAgent =
     LlmAgent.builder()
-      .name("StoryGenerator")
+      .name("AnswerPraiseAgent")
       .model(MODEL_NAME)
-      .description("Generates the initial story.")
+      .description("Explains why the user's plan is strong.")
       .instruction(
         """
-                You are a story writer. Write a short story (around 100 words) about a cat,
-                based on the topic: {topic}
-                """)
-      .inputSchema(null)
-      .outputKey("current_critic_output") // Key for storing output in session state
+          You celebrate effective financial plans. Given the scenario {scenario_question} and the user's answer {user_answer},
+          explain in two or three sentences why their approach can work. Emphasize specific habits or calculations and keep the tone encouraging.
+        """.stripMargin)
+      .outputKey("praise_feedback")
       .build()
 
-  val critic: LlmAgent =
+  private val rejectAnswerAgent: LlmAgent =
     LlmAgent.builder()
-      .name("Critic")
+      .name("RejectAnswerAgent")
       .model(MODEL_NAME)
-      .description("The base critic agent")
+      .description("Highlights why the user's plan might fail.")
       .instruction(
         """
-            You are a story writer. Write a short story (around 100 words) about a cat,
-            based on the topic: {topic}
-            """)
-      .inputSchema(null)
-      .outputKey("current_critic_output") // Key for storing output in session state
+          You are a tough financial reviewer. Using the scenario {scenario_question} and the user's answer {user_answer},
+          reject the plan and describe the top reasons it would fail. Point out missing steps, risky assumptions, or financial consequences.
+        """.stripMargin)
+      .outputKey("rejection_feedback")
       .build()
 
-  val reviser: LlmAgent =
+  private val refinerAgent: LlmAgent =
     LlmAgent.builder()
-      .name("Reviser")
+      .name("AnswerRefiner")
       .model(MODEL_NAME)
-      .description("Revises the story based on criticism.")
+      .description("Improves the user's plan and manages feedback sub-agents.")
       .instruction(
         """
-            You are a story reviser. Revise the story: {current_story}, based on the criticism: {criticism}. Output only the revised story.
-            """)
-      .inputSchema(null)
-      .outputKey("current_story") // Overwrites the original story
-      .build();
-
-  val loopAgent: LoopAgent =
-    LoopAgent.builder()
-      .name("CriticReviserLoop")
-      .description("Iteratively critiques and revises the story.")
-      .subAgents(critic, reviser)
-      .maxIterations(10)
+          You are a financial coach. Combine the scenario {scenario_question} and the user's plan {user_answer}.
+          Rewrite the plan into a clearer sequence of steps with concrete amounts, trade-offs, and reasoning.
+        """.stripMargin)
+      .outputKey("refined_answer")
+      .subAgents(answerPraiseAgent, rejectAnswerAgent)
       .build()
 
-  val grammarCheck: LlmAgent =
+  private val scenarioAgent: LlmAgent =
     LlmAgent.builder()
-      .name("GrammarCheck")
+      .name("ScenarioGenerator")
       .model(MODEL_NAME)
-      .description("Checks grammar and suggests corrections.")
+      .description("Creates realistic financial literacy challenges.")
       .instruction(
         """
-                 You are a grammar checker. Check the grammar of the story: {current_story}. Output only the suggested
-                 corrections as a list, or output 'Grammar is good!' if there are no errors.
-                 """)
-      .outputKey("grammar_suggestions")
+          Create one realistic financial literacy scenario that forces a decision about budgeting, saving, investing,
+          or debt management. Keep it concise but detailed enough for the user to craft a thoughtful response.
+        """.stripMargin)
+      .outputKey("scenario_question")
+      .subAgents(refinerAgent)
       .build()
 
-  val toneCheck: LlmAgent =
-    LlmAgent.builder()
-      .name("ToneCheck")
-      .model(MODEL_NAME)
-      .description("Analyzes the tone of the story.")
-      .instruction(
-        """
-                You are a tone analyzer. Analyze the tone of the story: {current_story}. Output only one word: 'positive' if
-                the tone is generally positive, 'negative' if the tone is generally negative, or 'neutral'
-                otherwise.
-                """)
-      .outputKey("tone_check_result") // This agent's output determines the conditional flow
-      .build()
+  private val financialAgentPrototype =
+    FinancialLiteracyAgent(
+      name = "FinancialLiteracyAgent",
+      scenarioAgent = scenarioAgent,
+      refinerAgent = refinerAgent,
+      praiseAgent = answerPraiseAgent,
+      rejectAgent = rejectAnswerAgent
+    )
 
-  val sequentialAgent: SequentialAgent =
-    SequentialAgent.builder()
-      .name("PostProcessing")
-      .description("Performs grammar and tone checks sequentially.")
-      .subAgents(grammarCheck, toneCheck)
-      .build()
+  def generateAgent(name: String): FinancialLiteracyAgent =
+    FinancialLiteracyAgent(
+      name = name,
+      scenarioAgent = scenarioAgent,
+      refinerAgent = refinerAgent,
+      praiseAgent = answerPraiseAgent,
+      rejectAgent = rejectAnswerAgent
+    )
 
-  def generateAgent(name: String): StoryFlowAgent = StoryFlowAgent(name, storyGenerator, loopAgent, sequentialAgent)
-
-  def runCustomAgent(agent: StoryFlowAgent, userTopic: String) =
-    // --- Setup Runner and Session ---
+  def runFinancialAgent(agent: FinancialLiteracyAgent, userMessage: String): Unit =
     val runner = new InMemoryRunner(agent)
-
-    val initialState = Map("topic" -> "a brave kitten exploring a haunted house")
+    val initialState = Map.empty[String, AnyRef]
 
     val session = runner
-        .sessionService()
-        .createSession(APP_NAME, USER_ID, ConcurrentHashMap(initialState.asJava), SESSION_ID)
-        .blockingGet();
-    
-    logger.log(Level.INFO, () => s"[${agent.name}] Starting story generation workflow.")
+      .sessionService()
+      .createSession(
+        APP_NAME,
+        USER_ID,
+        ConcurrentHashMap(initialState.asJava),
+        SESSION_ID
+      )
+      .blockingGet()
 
-    session.state().put("topic", userTopic) // Update the state in the retrieved session
+    logger.log(Level.INFO, () => s"[${agent.name}] Starting financial literacy workflow.")
 
-    val userMessage = Content.fromParts(Part.fromText(s"Generate a story about: $userTopic"))
-    val eventStream = runner.runAsync(USER_ID, session.id(), userMessage)
+    val userContent = Content.fromParts(Part.fromText(userMessage))
+    val eventStream = runner.runAsync(USER_ID, session.id(), userContent)
 
     val finalResponse = Array("No final response captured.")
 
-    eventStream.blockingForEach(
-      event =>
-        if (event.finalResponse() && event.content().isPresent) {
-          val author = if event.author() != null
-            then event.author()
-            else "UNKNOWN_AUTHOR"
+    eventStream.blockingForEach { event =>
+      if event.finalResponse() && event.content().isPresent then
+        val author = Option(event.author()).getOrElse("UNKNOWN_AUTHOR")
+        val textOpt = event
+          .content()
+          .flatMap(_.parts)
+          .filter(!_.isEmpty)
+          .map(_.get(0).text().orElse(""))
 
-          val textOpt = event
-              .content()
-              .flatMap(_.parts)
-              .filter(!_.isEmpty)
-              .map(_.get(0).text().orElse(""))
+        logger.log(Level.INFO, () => s"Potential final response from [$author]: ${textOpt.orElse("N/A")}")
+        textOpt.ifPresent(text => finalResponse(0) = text)
+    }
 
-          logger.log(Level.INFO, () => String.format("Potential final response from [%s]: %s", author, textOpt.orElse("N/A")));
-          textOpt.ifPresent(text => finalResponse(0) = text)
-        }
-      )
-
-    // Retrieve session again to see the final state after the run
     val finalSession = runner
-        .sessionService()
-        .getSession(APP_NAME, USER_ID, SESSION_ID, Optional.empty)
-        .blockingGet();
+      .sessionService()
+      .getSession(APP_NAME, USER_ID, SESSION_ID, Optional.empty())
+      .blockingGet()
 
-    assert(finalSession != null)
+    require(finalSession != null, "Final session must be available.")
 
-    System.out.println("Final Session State:" + finalSession.state());
-    System.out.println("-------------------------------\n");
+    System.out.println("Final Session State:" + finalSession.state())
+    System.out.println("Latest Final Response:" + finalResponse(0))
+    System.out.println("-------------------------------\n")
+
+  def demo(): Unit =
+    runFinancialAgent(financialAgentPrototype, "Hei, aloitetaan skenaariolla.")
 
 end LLMAgentService
-
-
-
