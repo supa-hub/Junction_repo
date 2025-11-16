@@ -187,10 +187,13 @@ export function PlaySessionPage() {
       const newPromptId = nextPromptId()
       setActivePromptId(newPromptId)
     } catch (scenarioError) {
-      const message = scenarioError instanceof ApiError && typeof scenarioError.body === 'object'
-        ? (scenarioError.body as { message?: string } | null)?.message
-        : null
-      setError(message ?? 'Unable to load the next scenario just yet.')
+      if (scenarioError instanceof ApiError) {
+        setError(scenarioError.message)
+      } else if (scenarioError instanceof Error) {
+        setError(scenarioError.message)
+      } else {
+        setError('Unable to load the next scenario just yet.')
+      }
       if (scenarioError instanceof ApiError && (scenarioError.status === 409 || scenarioError.status === 423)) {
         setSessionStatus('waiting_for_start')
       }
@@ -298,10 +301,13 @@ export function PlaySessionPage() {
         }
       }
     } catch (sendError) {
-      const message = sendError instanceof ApiError && typeof sendError.body === 'object'
-        ? (sendError.body as { message?: string } | null)?.message
-        : null
-      setError(message ?? 'Could not contact the game server.')
+      if (sendError instanceof ApiError) {
+        setError(sendError.message)
+      } else if (sendError instanceof Error) {
+        setError(sendError.message)
+      } else {
+        setError('Could not contact the game server.')
+      }
     } finally {
       setStatus('idle')
     }

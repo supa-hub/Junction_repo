@@ -34,8 +34,12 @@ export function JoinGamePanel() {
       })
     } catch (joinError) {
       if (joinError instanceof ApiError) {
-        const body = joinError.body as { message?: string } | null
-        setError(body?.message ?? 'Could not join the classroom. Try again.')
+        let message: string | undefined
+        if (typeof joinError.body === 'object' && joinError.body !== null) {
+          const body = joinError.body as { message?: string; err?: string }
+          message = body.message ?? body.err
+        }
+        setError(message ?? joinError.message ?? 'Could not join the classroom. Try again.')
       } else if (joinError instanceof Error) {
         setError(joinError.message)
       } else {
