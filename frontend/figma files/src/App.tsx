@@ -115,7 +115,7 @@ export default function App() {
           {/* Header */}
           <div className="space-y-6">
             <h1 className="text-white">
-              Money Masters
+              Don't spend it all on vodka
             </h1>
             
             <p className="text-slate-300 text-xl max-w-xl mx-auto">

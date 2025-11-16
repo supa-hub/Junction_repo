@@ -64,6 +64,9 @@ function StatCard({ icon, label, value, tone, format = 'percent' }: StatCardProp
       ? EURO_FORMATTER.format(Math.max(0, Math.round(value)))
       : `${value}%`
 
+  const showProgressBar = format === 'percent'
+  const progressWidth = Math.max(0, Math.min(100, value))
+
   return (
     <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
       <div className="flex items-center gap-2 text-slate-300">
@@ -71,9 +74,11 @@ function StatCard({ icon, label, value, tone, format = 'percent' }: StatCardProp
         <span className="text-sm uppercase tracking-wide">{label}</span>
         <span className="ml-auto font-semibold text-white">{formattedValue}</span>
       </div>
-      <div className="mt-3 h-2 rounded-full bg-white/10">
-        <div className={cn('h-2 rounded-full transition-all duration-500', barTone)} style={{ width: `${value}%` }} />
-      </div>
+      {showProgressBar && (
+        <div className="mt-3 h-2 rounded-full bg-white/10">
+          <div className={cn('h-2 rounded-full transition-all duration-500', barTone)} style={{ width: `${progressWidth}%` }} />
+        </div>
+      )}
     </div>
   )
 }

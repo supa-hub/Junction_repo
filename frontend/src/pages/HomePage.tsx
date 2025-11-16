@@ -23,7 +23,7 @@ export function HomePage() {
               <div className="inline-flex items-center justify-center gap-2 rounded-full border border-purple-500/40 bg-purple-600/20 px-4 py-2 text-sm text-purple-100 md:justify-start">
                 Financial Literacy Game
               </div>
-              <h1 className="font-heading text-[clamp(2.5rem,5vw,4rem)] leading-tight text-white">Money Masters</h1>
+              <h1 className="font-heading text-[clamp(2.5rem,5vw,4rem)] leading-tight text-white">Don't spend it all on vodka</h1>
               <p className="mx-auto max-w-3xl text-base text-slate-200 md:mx-0">
                 A 45-minute classroom simulation where students juggle wealth, health, and happiness in real time while teachers monitor the room from a live dashboard.
               </p>
