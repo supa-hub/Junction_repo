@@ -30,15 +30,6 @@ export interface CreateTeacherSessionPayload {
   monthlyIncome: number
 }
 
-export interface SessionCreated {
-  sessionId: string
-  sessionName: string
-  joinCode: string
-  status: SessionStatus
-  location: string
-  monthlyIncome: number
-}
-
 export interface SessionSummary {
   sessionId: string
   sessionName: string
@@ -171,15 +162,98 @@ export interface StudentInsights {
   trend: Record<string, number[]>
 }
 
+interface BackendSuccessfulResponse {
+  res: string
+}
+
+interface BackendSessionSummary {
+  sessionName: string
+  joinCode: string
+  status: SessionStatus
+  startedAt?: string | null
+  playerCount: number
+  location: string
+  monthlyIncome: number
+}
+
+const AUTH_COOKIE_NAME = 'authcookie'
+
 let authToken: string | null = null
+
+function base64UrlDecode(segment: string): string {
+  const normalized = segment.replace(/-/g, '+').replace(/_/g, '/')
+  const padding = (4 - (normalized.length % 4 || 4)) % 4
+  const padded = normalized + '='.repeat(padding)
+
+  if (typeof atob === 'function') {
+    return atob(padded)
+  }
+
+  const bufferCtor = (globalThis as { Buffer?: { from(data: string, encoding: string): { toString(enc: string): string } } }).Buffer
+  if (bufferCtor) {
+    return bufferCtor.from(padded, 'base64').toString('utf-8')
+  }
+
+  throw new Error('Base64 decoding is not supported in this environment')
+}
+
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  const parts = token.split('.')
+  if (parts.length < 2) return null
+  try {
+    const json = base64UrlDecode(parts[1])
+    return JSON.parse(json) as Record<string, unknown>
+  } catch {
+    return null
+  }
+}
+
+function getJwtExpiration(token: string): number | null {
+  const payload = decodeJwtPayload(token)
+  const exp = payload?.exp
+  if (typeof exp === 'number') {
+    return exp * 1000
+  }
+  return null
+}
+
+function deriveExpiresInSeconds(token: string): number {
+  const expiresAt = getJwtExpiration(token)
+  if (!expiresAt) {
+    return 3600
+  }
+  const diffMs = expiresAt - Date.now()
+  return Math.max(60, Math.floor(diffMs / 1000))
+}
 
 export function setAuthToken(token: string | null) {
   authToken = token
+
+  if (typeof document === 'undefined') {
+    return
+  }
+
+  if (!token) {
+    document.cookie = `${AUTH_COOKIE_NAME}=; Max-Age=0; path=/; SameSite=Lax`
+    return
+  }
+
+  const cookieParts = [`path=/`, `SameSite=Lax`]
+  const expiresAt = getJwtExpiration(token)
+  if (expiresAt) {
+    cookieParts.push(`Expires=${new Date(expiresAt).toUTCString()}`)
+  }
+  if (typeof window !== 'undefined' && window.location.protocol === 'https:') {
+    cookieParts.push('Secure')
+  }
+
+  document.cookie = `${AUTH_COOKIE_NAME}=${token}; ${cookieParts.join('; ')}`
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
+    credentials: init?.credentials ?? 'include',
     headers: {
       'Content-Type': 'application/json',
       ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
@@ -195,7 +269,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       body = null
     }
-    const message = typeof body === 'object' && body && 'message' in body ? (body as { message: string }).message : undefined
+    const message = (() => {
+      if (typeof body !== 'object' || body === null) return undefined
+      if ('message' in body && typeof (body as { message?: string }).message === 'string') {
+        return (body as { message: string }).message
+      }
+      if ('err' in body && typeof (body as { err?: string }).err === 'string') {
+        return (body as { err: string }).err
+      }
+      return undefined
+    })()
     throw new ApiError(response.status, body, message)
   }
 
@@ -209,27 +292,51 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   loginTeacher(payload: LoginPayload) {
-    return request<AuthToken>('/api/auth/login', {
+    return request<BackendSuccessfulResponse>('/api/login', {
       method: 'POST',
       body: JSON.stringify(payload),
+    }).then((response) => {
+      const token = response.res
+      const expiresInSeconds = deriveExpiresInSeconds(token)
+      return {
+        teacherId: payload.email,
+        token,
+        expiresInSeconds,
+      }
     })
   },
 
-  createTeacherSession(teacherId: string, payload: CreateTeacherSessionPayload) {
-    return request<SessionCreated>(`/api/teachers/${teacherId}/sessions`, {
+  createTeacherSession(email: string, payload: CreateTeacherSessionPayload) {
+    const requestBody = {
+      email,
+      sessionName: payload.sessionName,
+      sessionLocation: payload.location,
+    }
+    return request<BackendSuccessfulResponse>('/api/teachers/newSession', {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: JSON.stringify(requestBody),
     })
   },
 
-  listTeacherSessions(teacherId: string) {
-    return request<SessionSummary[]>(`/api/teachers/${teacherId}/sessions`, {
+  listTeacherSessions() {
+    return request<BackendSessionSummary[]>('/api/teachers/sessions', {
       method: 'GET',
-    })
+    }).then((sessions) =>
+      sessions.map((session) => ({
+        sessionId: session.joinCode,
+        sessionName: session.sessionName,
+        joinCode: session.joinCode,
+        status: session.status,
+        startedAt: session.startedAt ?? undefined,
+        playerCount: session.playerCount,
+        location: session.location,
+        monthlyIncome: session.monthlyIncome,
+      }))
+    )
   },
 
-  startTeacherSession(teacherId: string, sessionId: string) {
-    return request<SessionStarted>(`/api/teachers/${teacherId}/sessions/${sessionId}/start`, {
+  startTeacherSession(sessionId: string) {
+    return request<SessionStarted>(`/api/teachers/sessions/${sessionId}/start`, {
       method: 'POST',
     })
   },

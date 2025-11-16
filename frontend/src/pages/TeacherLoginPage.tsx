@@ -33,8 +33,12 @@ export function TeacherLoginPage() {
       navigate('/teacher/dashboard', { replace: true })
     } catch (loginError) {
       if (loginError instanceof ApiError) {
-        const body = loginError.body as { message?: string } | null
-        setError(body?.message ?? 'Unable to sign in with those credentials.')
+        let message: string | undefined
+        if (typeof loginError.body === 'object' && loginError.body !== null) {
+          const body = loginError.body as { message?: string; err?: string }
+          message = body.message ?? body.err
+        }
+        setError(message ?? loginError.message ?? 'Unable to sign in with those credentials.')
       } else if (loginError instanceof Error) {
         setError(loginError.message)
       } else {

@@ -94,13 +94,16 @@ export function TeacherDashboardPage() {
     setLoadingSessions(true)
     setError(null)
     try {
-      const response = await api.listTeacherSessions(auth.teacherId)
+      const response = await api.listTeacherSessions()
       setSessions(response)
     } catch (sessionError) {
-      const message = sessionError instanceof ApiError && typeof sessionError.body === 'object'
-        ? (sessionError.body as { message?: string } | null)?.message
-        : null
-      setError(message ?? 'Unable to fetch sessions right now.')
+      if (sessionError instanceof ApiError) {
+        setError(sessionError.message)
+      } else if (sessionError instanceof Error) {
+        setError(sessionError.message)
+      } else {
+        setError('Unable to fetch sessions right now.')
+      }
     } finally {
       setLoadingSessions(false)
     }
@@ -113,10 +116,13 @@ export function TeacherDashboardPage() {
       const summary = await api.fetchAnalyticsSummary(sessionId)
       setAnalytics((previous) => ({ ...previous, [sessionId]: summary }))
     } catch (analyticsError) {
-      const message = analyticsError instanceof ApiError && typeof analyticsError.body === 'object'
-        ? (analyticsError.body as { message?: string } | null)?.message
-        : null
-      setError(message ?? 'Unable to load analytics for this session.')
+      if (analyticsError instanceof ApiError) {
+        setError(analyticsError.message)
+      } else if (analyticsError instanceof Error) {
+        setError(analyticsError.message)
+      } else {
+        setError('Unable to load analytics for this session.')
+      }
     } finally {
       setLoadingAnalytics(false)
     }
@@ -126,7 +132,7 @@ export function TeacherDashboardPage() {
     if (!auth) return
     if (!newClassroom.name.trim() || !newClassroom.location.trim()) return
     try {
-      await api.createTeacherSession(auth.teacherId, {
+      await api.createTeacherSession(auth.email, {
         sessionName: newClassroom.name.trim(),
         location: newClassroom.location.trim(),
         monthlyIncome: newClassroom.monthlyIncome,
@@ -135,10 +141,13 @@ export function TeacherDashboardPage() {
       setShowCreateDialog(false)
       setNewClassroom({ name: '', location: '', monthlyIncome: 3500 })
     } catch (createError) {
-      const message = createError instanceof ApiError && typeof createError.body === 'object'
-        ? (createError.body as { message?: string } | null)?.message
-        : null
-      setError(message ?? 'Unable to create classroom. Please try again.')
+      if (createError instanceof ApiError) {
+        setError(createError.message)
+      } else if (createError instanceof Error) {
+        setError(createError.message)
+      } else {
+        setError('Unable to create classroom. Please try again.')
+      }
     }
   }
 
@@ -151,7 +160,7 @@ export function TeacherDashboardPage() {
   const handleStartSession = async () => {
     if (!auth || !selectedSession) return
     try {
-      const started = await api.startTeacherSession(auth.teacherId, selectedSession.sessionId)
+      const started = await api.startTeacherSession(selectedSession.sessionId)
       setSessions((previous) =>
         previous.map((session) =>
           session.sessionId === selectedSession.sessionId
@@ -160,15 +169,19 @@ export function TeacherDashboardPage() {
         ),
       )
     } catch (startError) {
-      const message = startError instanceof ApiError && typeof startError.body === 'object'
-        ? (startError.body as { message?: string } | null)?.message
-        : null
-      setError(message ?? 'Unable to start the session right now.')
+      if (startError instanceof ApiError) {
+        setError(startError.message)
+      } else if (startError instanceof Error) {
+        setError(startError.message)
+      } else {
+        setError('Unable to start the session right now.')
+      }
     }
   }
 
   const handleLogout = () => {
     clearTeacherAuth()
+    setAuthToken(null)
     setAuth(null)
     setSessions([])
     setSelectedSessionId(null)

@@ -23,10 +23,12 @@ export function Leaderboard({ sessionId, sessionName, onBack }: LeaderboardProps
         const response = await api.fetchLeaderboard(sessionId)
         if (mounted) setState({ data: response, loading: false, error: null })
       } catch (leaderboardError) {
-        const message = leaderboardError instanceof ApiError && typeof leaderboardError.body === 'object'
-          ? (leaderboardError.body as { message?: string } | null)?.message
-          : null
-        if (mounted) setState({ data: null, loading: false, error: message ?? 'Unable to load leaderboard.' })
+        const message = leaderboardError instanceof ApiError
+          ? leaderboardError.message
+          : leaderboardError instanceof Error
+            ? leaderboardError.message
+            : 'Unable to load leaderboard.'
+        if (mounted) setState({ data: null, loading: false, error: message })
       }
     }
     fetchLeaderboard()
