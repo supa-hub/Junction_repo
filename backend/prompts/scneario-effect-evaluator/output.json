@@ -1,0 +1,23 @@
+{
+  "updated_student_state": {
+    "student_id": "optional-string-id",
+    "location": "Helsinki",
+    "monthlyIncome": 600,
+    "wealth": 1400,
+    "happiness": 60,
+    "health": 80,
+    "riskTaking": 7,
+    "laziness": 3,
+    "impulsiveness": 6,
+    "longTermEffects": [
+      "<long term effect description>",
+      "<additional long term effect>"
+    ],
+    "completedScenarios": [
+      "SCENARIO_ID_1",
+      "SCENARIO_ID_2"
+    ],
+    "studentLanguage": "fi"
+  },
+  "student_continuation_text": "<continuation text in the student's preferred language>"
+}
