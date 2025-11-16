@@ -1,22 +1,20 @@
 {
   "student_id": "optional-string-id",
-  "location_city": "Helsinki",
-  "monthly_income_eur": 600,
-  "wealth_score": 1400,
-  "happiness_score_percent": 60,
-  "health_score_percent": 80,
-  "habit_scores": {
-    "risk_taking": 8,
-    "laziness": 3,
-    "impulsiveness": 7
-  },
-  "long_term_effects": [
+  "location": "Helsinki",
+  "monthlyIncome": 600,
+  "wealth": 1400,
+  "happiness": 60,
+  "health": 80,
+  "riskTaking": 8,
+  "laziness": 3,
+  "impulsiveness": 7,
+  "longTermEffects": [
     "the student shoplifted groceries but has not yet faced consequences"
   ],
-  "completed_scenarios": [
+  "completedScenarios": [
     "ID1",
     "ID2",
     "ID3"
   ],
-  "student_language": "fi"
+  "studentLanguage": "fi"
 }
