@@ -39,7 +39,8 @@ final case class ScenarioState(
 final case class SessionPayload(
   email: String,
   sessionName: String,
-  sessionLocation: String
+  sessionLocation: String,
+  monthlyIncome: Option[models.Number] = None
 ) derives ReadWriter
 
 final case class CreateTeacherSessionPayload(

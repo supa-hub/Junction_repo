@@ -311,6 +311,7 @@ export const api = {
       email,
       sessionName: payload.sessionName,
       sessionLocation: payload.location,
+      monthlyIncome: payload.monthlyIncome,
     }
     return request<BackendSuccessfulResponse>('/api/teachers/newSession', {
       method: 'POST',

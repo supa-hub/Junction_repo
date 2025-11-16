@@ -106,7 +106,7 @@ object ProfessorSessionMongo:
 end ProfessorSessionMongo
 
 object SessionMongo:
-  def generate(name: String, joinCode: String, location: String): SessionMongo =
+  def generate(name: String, joinCode: String, location: String, monthlyIncome: models.Number): SessionMongo =
     SessionMongo(
       _id = ObjectId.gen,
       sessionName = name,
@@ -117,7 +117,7 @@ object SessionMongo:
       scenarioCompletions = Map.empty,
       historyRuns = List(),
       location = location,
-      monthlyIncome = 0.0
+      monthlyIncome = monthlyIncome
     )
 
   def generateCode: String =

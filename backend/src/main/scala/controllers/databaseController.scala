@@ -42,7 +42,7 @@ def storeSessionData(payload: SessionPayload): IO[Either[ErrorResponse, Successf
 
 def createNewSession(payload: SessionPayload): IO[Either[ErrorResponse, SuccessfulResponse]] =
   DataBaseService
-    .addSession(payload.email, payload.sessionName, payload.sessionLocation)
+    .addSession(payload.email, payload.sessionName, payload.sessionLocation, payload.monthlyIncome.getOrElse(0.0))
     .map {
       case Right(res) => Right(SuccessfulResponse())
       case Left(err) => Left(ErrorResponse(s"Couldn't add the data to database due to an error: ${err.getMessage}"))

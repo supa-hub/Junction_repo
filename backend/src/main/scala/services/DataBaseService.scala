@@ -4,6 +4,7 @@ import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import com.mongodb.client.model.Indexes
 import com.mongodb.client.result.UpdateResult
+import models.Number
 import models.mongo.bsonencoders.given
 import models.mongo.mongocodecs.given
 import models.mongo.{ProfessorSessionMongo, ProfessorUserMongo, SessionMongo, StudentUserMongo}
@@ -201,7 +202,7 @@ object DataBaseService:
    * @tparam A
    * @return
    */
-  def addSession[A](email: String, aSessionName: String, location: String)(using Conversion[A, SessionMongo]): IO[Either[Throwable, Option[String]]] =
+  def addSession[A](email: String, aSessionName: String, location: String, monthlyIncome: Number)(using Conversion[A, SessionMongo]): IO[Either[Throwable, Option[String]]] =
     // find a session join code that isn't used yet
     val sessionCode = fs2.Stream.repeatEval(
       professorSessionCollection
@@ -221,7 +222,7 @@ object DataBaseService:
     (sessionCode, professorSessionCollection)
       .parTupled
       .flatMap((code, collection) =>
-        val data = SessionMongo.generate(aSessionName, code, location)
+        val data = SessionMongo.generate(aSessionName, code, location, monthlyIncome)
         collection.insertOne(ProfessorSessionMongo.generate(email, data))
       )
       .map(res => Option(res.getInsertedId))
