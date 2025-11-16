@@ -162,6 +162,7 @@ export function PlaySessionPage() {
   const loadScenario = useCallback(async () => {
     if (!player || !sessionId) return
     if (sessionStatus && sessionStatus !== 'in_progress') return
+    if (status === 'loadingScenario') return
     setStatus('loadingScenario')
     setError(null)
     setResult(null)
@@ -203,7 +204,7 @@ export function PlaySessionPage() {
     } finally {
       setStatus('idle')
     }
-  }, [nextPromptId, player, sessionId, sessionStatus])
+  }, [nextPromptId, player, sessionId, sessionStatus, status])
 
   useEffect(() => {
     if (locationState) {
@@ -222,7 +223,9 @@ export function PlaySessionPage() {
     if (!player || !sessionId) return
     if (sessionStatus === 'in_progress') {
       waitingNoticeRef.current = false
-      loadScenario()
+      if (!scenario && status === 'idle') {
+        loadScenario()
+      }
       return
     }
 
@@ -249,7 +252,7 @@ export function PlaySessionPage() {
         ]
       })
     }
-  }, [player, sessionId, sessionStatus, loadScenario])
+  }, [player, sessionId, sessionStatus, scenario, status, loadScenario])
 
   useEffect(() => {
     if (!player || !sessionId) return

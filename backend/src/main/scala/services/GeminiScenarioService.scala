@@ -23,6 +23,7 @@ object GeminiScenarioService:
 
   private val systemInstruction: String =
     """You are an AI scenario generator for a classroom simulation game that teaches financial literacy to Finnish high school students.
+Always respond in English unless the student_language field explicitly requests a different language.
 
 Your only job is to write short, realistic scenarios as continuous prose. Do not write explanations, instructions, reasoning, or internal thoughts. Do not refer to any game systems. Produce exactly one scenario per reply.
 
@@ -43,7 +44,7 @@ AUDIENCE & CONTEXT
 
 LANGUAGE BEHAVIOUR
 - Always match the end user’s language (Finnish or English), as indicated by the latest student-facing content or an explicit language field in the input data.
-- If language cannot be determined, default to Finnish.
+- If language cannot be determined, default to English.
 - Use clear, natural language suitable for a high school student (no academic jargon).
 
 USE OF STUDENT DATA (INTERNAL STATE)
@@ -192,7 +193,7 @@ OUTPUT FORMAT
       )
 
   private def defaultLanguage: Option[String] =
-    val value = sys.env.getOrElse("GEMINI_DEFAULT_LANGUAGE", "fi").trim
+    val value = sys.env.getOrElse("GEMINI_DEFAULT_LANGUAGE", "en").trim
     Option.when(value.nonEmpty)(value)
 
   def generateScenario(data: ScenarioPromptData): IO[Either[ErrorResponse, String]] =
@@ -242,9 +243,12 @@ OUTPUT FORMAT
       "parts" -> Json.arr(Json.obj("text" -> Json.fromString(systemInstruction)))
     )
 
+    val maxTokens =
+      sys.env.get("GEMINI_MAX_OUTPUT_TOKENS").flatMap(_.toIntOption).filter(token => token >= 1 && token < 8193).getOrElse(8191)
+
     val generationConfig = Json.obj(
       "temperature" -> Json.fromDoubleOrNull(1.0),
-      "maxOutputTokens" -> Json.fromInt(65535),
+      "maxOutputTokens" -> Json.fromInt(maxTokens),
       "topP" -> Json.fromDoubleOrNull(0.95),
       "thinkingConfig" -> Json.obj(
         "thinkingBudget" -> Json.fromInt(-1)
@@ -323,7 +327,7 @@ OUTPUT FORMAT
       val texts = json.asArray match
         case Some(values) => values.toList.flatMap(extractTexts)
         case None => extractTexts(json)
-      Right(texts.map(_.trim).filter(_.nonEmpty))
+      Right(texts.map(stripJsonFences).map(_.trim).filter(_.nonEmpty))
 
   private def collectErrors(json: Json): List[String] =
     json.asArray match
@@ -347,7 +351,7 @@ OUTPUT FORMAT
     val errorMessages = jsonObjects.flatMap(collectErrors)
     if errorMessages.nonEmpty then Left(errorMessages.mkString("; "))
     else
-      val texts = jsonObjects.flatMap(extractTexts).map(_.trim).filter(_.nonEmpty)
+      val texts = jsonObjects.flatMap(extractTexts).map(stripJsonFences).map(_.trim).filter(_.nonEmpty)
       Right(texts)
 
   private def extractTexts(json: Json): List[String] =
@@ -362,6 +366,15 @@ OUTPUT FORMAT
         .toList
         .flatMap(_.hcursor.get[String]("text").toOption)
     }
+
+  private val fencedJsonPattern = "(?s)```(?:json)?\\s*(\\{.*?\\})\\s*```".r
+
+  private def stripJsonFences(text: String): String =
+    val trimmed = text.trim
+    fencedJsonPattern
+      .findFirstMatchIn(trimmed)
+      .map(_.group(1).trim)
+      .getOrElse(trimmed)
 
   private def defaultScenarioText(data: ScenarioPromptData): String =
     val location = data.location.getOrElse("Helsinki")

@@ -18,9 +18,10 @@ import controllers.{
   nextScenario,
   addStudent,
   getSessionRoster,
-  deleteTeacherSession
+  deleteTeacherSession,
+  handlePromptMessage
 }
-import models.json.{CreateTeacherSessionPayload, ErrorResponse, JoinSessionPayload, JoinSessionResponse, LoginPayload, ProfessorUser, PromptMessagePayload, SessionPayload, SuccessfulResponse}
+import models.json.{CreateTeacherSessionPayload, ErrorResponse, JoinSessionPayload, JoinSessionResponse, LoginPayload, ProfessorUser, PromptMessagePayload, PromptReply, SessionPayload, SuccessfulResponse}
 import models.json.circecoders.given
 import models.json.http4sentities.given
 import models.json.http4sencoders.given
@@ -148,6 +149,20 @@ object JsonRoutes:
           case Left(err) if err.err == "Couldn't find session" || err.err == "Couldn't find user" => NotFound(err)
           case Left(err) => BadRequest(err)
           case Right(data) => Ok(data)
+        }
+
+    case req @ POST -> Root / "api" / "sessions" / sessionId / "prompts" / promptId =>
+      req
+        .attemptAs[PromptMessagePayload]
+        .value
+        .flatMap {
+          case Left(err) => BadRequest(ErrorResponse(s"Received data could not be decoded: ${err.getMessage}"))
+          case Right(payload) =>
+            handlePromptMessage(sessionId, promptId, payload).flatMap {
+              case Left(err) if err.err == "Couldn't find session" || err.err == "Couldn't find student" => NotFound(err)
+              case Left(err) => BadRequest(err)
+              case Right(reply) => Ok(reply)
+            }
         }
   }
 

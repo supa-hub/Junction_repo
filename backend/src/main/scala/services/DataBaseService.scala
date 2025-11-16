@@ -17,6 +17,7 @@ import mongo4cats.models.collection.IndexOptions
 import mongo4cats.operations.{Filter, Index, Update}
 
 import scala.jdk.CollectionConverters.*
+import java.util.Locale
 
 object DataBaseService:
   // indexes to use in the compoundIndexes. The compoundIndex is used
@@ -26,6 +27,8 @@ object DataBaseService:
   private val sessionIndex = Index.ascending("sessionName")
   private val sessionCodeIndex = Index.ascending("sessionJoinCode")
   private val uniqueSessionIndex = sessionIndex.combinedWith(sessionCodeIndex)
+
+  private inline def normalizeJoinCode(code: String): String = code.trim.toUpperCase(Locale.ROOT)
 
   private val resourceAllocated = MongoClient
     .fromConnectionString[IO](constructConnectionString)
@@ -67,8 +70,21 @@ object DataBaseService:
   // filters
   // ------------
   private inline def userFilter(userId: String) = Filter.eq("email", userId)
-  private inline def userSessionFilter[A](value: A) = Filter.eq(s"${sessionField}.sessionJoinCode", value)
-  private inline def sessionFilter(sessionJoinCode: String) = Filter.eq("sessionJoinCode", sessionJoinCode)
+  private inline def userSessionFilter(value: String) =
+    val normalized = normalizeJoinCode(value)
+    val trimmed = value.trim
+    if normalized == trimmed then
+      Filter.eq(s"${sessionField}.sessionJoinCode", normalized)
+    else
+      Filter.eq(s"${sessionField}.sessionJoinCode", normalized) || Filter.eq(s"${sessionField}.sessionJoinCode", trimmed)
+
+  private inline def sessionFilter(sessionJoinCode: String) =
+    val normalized = normalizeJoinCode(sessionJoinCode)
+    val trimmed = sessionJoinCode.trim
+    if normalized == trimmed then
+      Filter.eq("sessionJoinCode", normalized)
+    else
+      Filter.eq("sessionJoinCode", normalized) || Filter.eq("sessionJoinCode", trimmed)
   // ------------
 
   def getFinalizers: IO[Unit] = finalizers

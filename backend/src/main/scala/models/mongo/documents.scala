@@ -9,6 +9,7 @@ import mongo4cats.codecs.MongoCodecProvider
 import mongo4cats.bson.BsonValueEncoder
 
 import scala.util.Random
+import java.util.Locale
 
 
 final case class SessionMongo(
@@ -32,7 +33,14 @@ final case class ScenarioTemplateMongo(
 final case class ScenarioStateMongo(
   _id: ObjectId,
   template: ScenarioTemplateMongo,
-  turnsTaken: Int
+  turnsTaken: Int,
+  history: List[ScenarioTurnMongo] = List.empty
+)
+
+final case class ScenarioTurnMongo(
+  role: String,
+  message: String,
+  timestamp: Option[String]
 )
 
 final case class StudentStatsMongo(
@@ -44,7 +52,7 @@ final case class StudentStatsMongo(
   overTrusting: models.Number,
   laziness: models.Number,
   impulsiveness: models.Number,
-  scenariosDone: List[ObjectId],
+  scenariosDone: List[String],
   longTermEffects: List[String]
 )
 
@@ -60,7 +68,7 @@ final case class StudentUserMongo(
   _id: ObjectId = ObjectId.gen,
   userName: String,
   currentScenario: Option[ScenarioStateMongo] = None,
-  completedScenarios: List[ObjectId] = List(),
+  completedScenarios: List[String] = List(),
   stats: StudentStatsMongo = StudentStatsMongo(
     _id = ObjectId.gen,
     wealth = 1000,
@@ -110,7 +118,7 @@ object SessionMongo:
     SessionMongo(
       _id = ObjectId.gen,
       sessionName = name,
-      sessionJoinCode = joinCode,
+      sessionJoinCode = normalizeJoinCode(joinCode),
       students = List(),
       status = SessionStatus.Waiting,
       startedAt = None,
@@ -120,9 +128,13 @@ object SessionMongo:
       monthlyIncome = monthlyIncome
     )
 
+  private def normalizeJoinCode(code: String): String = code.trim.toUpperCase(Locale.ROOT)
+
   def generateCode: String =
     Random
       .alphanumeric
+      .filter(_.isLetterOrDigit)
+      .map(ch => if ch.isLetter then ch.toUpper else ch)
       .take(6)
       .mkString
 end SessionMongo
@@ -147,6 +159,8 @@ package circecoders:
   given scenarioTemplateDecoder: Decoder[ScenarioTemplateMongo] = deriveDecoder
   given scenarioEncoder: Encoder[ScenarioStateMongo] = deriveEncoder
   given scenarioDecoder: Decoder[ScenarioStateMongo] = deriveDecoder
+  given scenarioTurnEncoder: Encoder[ScenarioTurnMongo] = deriveEncoder
+  given scenarioTurnDecoder: Decoder[ScenarioTurnMongo] = deriveDecoder
 end circecoders
 
 package mongocodecs:

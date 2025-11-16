@@ -65,6 +65,18 @@ final case class ScenarioView(
   scenarioText: String
 )
 
+final case class StatEffect(stat: String, delta: models.Number)
+
+final case class PromptReply(
+  promptId: String,
+  aiReply: String,
+  status: String,
+  accepted: Boolean,
+  effects: List[StatEffect],
+  effectsSummary: Option[String] = None,
+  updatedStats: Option[StudentStats] = None
+)
+
 final case class SessionStarted(sessionId: String, status: String, startedAt: String)
 
 final case class StudentRosterEntry(
@@ -115,6 +127,8 @@ package circecoders:
   given scenarioViewEncoder: Encoder[ScenarioView] = deriveEncoder
   given studentRosterEntryEncoder: Encoder[StudentRosterEntry] = deriveEncoder
   given sessionRosterEncoder: Encoder[SessionRosterResponse] = deriveEncoder
+  given statEffectEncoder: Encoder[StatEffect] = deriveEncoder
+  given promptReplyEncoder: Encoder[PromptReply] = deriveEncoder
 end circecoders
 
 package http4sentities:
@@ -142,4 +156,5 @@ package http4sentities:
   given scenarioViewEntity: EntityEncoder[IO, ScenarioView] = jsonEncoderOf
   given studentRosterEntryEntity: EntityEncoder[IO, StudentRosterEntry] = jsonEncoderOf
   given sessionRosterEntity: EntityEncoder[IO, SessionRosterResponse] = jsonEncoderOf
+  given promptReplyEntity: EntityEncoder[IO, PromptReply] = jsonEncoderOf
 end http4sentities

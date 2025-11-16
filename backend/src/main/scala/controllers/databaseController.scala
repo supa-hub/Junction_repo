@@ -22,6 +22,10 @@ import models.json.{
   ScenarioView,
   Session,
   ScenarioState,
+  ScenarioTurn,
+  PromptMessagePayload,
+  PromptReply,
+  StatEffect,
   SessionPayload,
   SessionStarted,
   SessionSummary,
@@ -37,11 +41,13 @@ import models.json.{
   ScenarioTemplate
 }
 import models.mongo.StudentUserMongo
-import services.{DataBaseService, GeminiScenarioService, JWTService}
+import io.circe.Json
+import io.circe.syntax.*
+import services.{DataBaseService, GeminiScenarioService, GeminiPromptPipeline, JWTService}
 
 import java.time.Instant
 import java.time.format.DateTimeFormatter
-import java.util.UUID
+import java.util.{Locale, UUID}
 import mongo4cats.bson.ObjectId
 
 /**
@@ -57,6 +63,8 @@ def storeSessionData(payload: SessionPayload): IO[Either[ErrorResponse, Successf
       case Left(err) => Left(ErrorResponse("Couldn't add the data to database due to an error."))
     }
 */
+
+private inline def normalizeJoinCode(code: String): String = code.trim.toUpperCase(Locale.ROOT)
 
 
 def createNewSession(payload: SessionPayload): IO[Either[ErrorResponse, SuccessfulResponse]] =
@@ -110,11 +118,13 @@ def deleteTeacherSession(professorEmail: String, sessionId: String): IO[Either[E
     }
 
 def getStudentDashboard(sessionJoinCode: String, studentId: String): IO[Either[ErrorResponse, StudentDashboardResponse]] =
+  val trimmedJoinCode = sessionJoinCode.trim
+
   val dashboard = for
     studentObjectId <- EitherT.fromEither[IO](ObjectId.from(studentId).left.map(_ => ErrorResponse("Invalid student id")))
     sessionDoc <- EitherT(
       DataBaseService
-        .getSessionByJoinCode(sessionJoinCode)
+        .getSessionByJoinCode(trimmedJoinCode)
         .map(_.left.map(_ => ErrorResponse("Couldn't find session")))
     )
     student <- EitherT.fromOption[IO](
@@ -130,9 +140,11 @@ def getStudentDashboard(sessionJoinCode: String, studentId: String): IO[Either[E
 
 
 def addStudent(sessionJoinCode: String, studentName: String): IO[Either[ErrorResponse, JoinSessionResponse]] =
+  val normalizedJoinCode = normalizeJoinCode(sessionJoinCode)
+  val trimmedJoinCode = sessionJoinCode.trim
   val studentDoc = StudentUserMongo(userName = studentName)
   DataBaseService
-    .addStudentToSession(studentDoc, sessionJoinCode)
+    .addStudentToSession(studentDoc, trimmedJoinCode)
     .flatMap {
       case Left(err) => IO.pure(Left(ErrorResponse(s"Couldn't create the user due to an error: ${err.getMessage}")))
       case Right(result) if result.getMatchedCount == 0 => IO.pure(Left(ErrorResponse("Couldn't find session")))
@@ -140,7 +152,7 @@ def addStudent(sessionJoinCode: String, studentName: String): IO[Either[ErrorRes
       case Right(_) =>
         val stats: StudentStats = studentDoc.stats
         DataBaseService
-          .getSessionByJoinCode(sessionJoinCode)
+          .getSessionByJoinCode(trimmedJoinCode)
           .map {
             case Right(sessionDoc) =>
               Right(
@@ -154,7 +166,7 @@ def addStudent(sessionJoinCode: String, studentName: String): IO[Either[ErrorRes
             case Left(_) =>
               Right(
                 JoinSessionResponse(
-                  sessionId = sessionJoinCode,
+                  sessionId = normalizedJoinCode,
                   studentId = studentDoc._id.toHexString,
                   initialStats = stats,
                   sessionStatus = None
@@ -271,10 +283,12 @@ private def primeStudentScenarios(joinCode: String, students: List[StudentUser])
 
 
 def nextScenario(sessionJoinCode: String, studentIdentifier: String): IO[Either[ErrorResponse, ScenarioView]] =
+  val trimmedJoinCode = sessionJoinCode.trim
+
   val result = for
     sessionDoc <- EitherT(
       DataBaseService
-        .getSessionByJoinCode(sessionJoinCode)
+        .getSessionByJoinCode(trimmedJoinCode)
         .map(_.left.map(_ => ErrorResponse("Couldn't find session")))
     )
     scenarioView <-
@@ -300,7 +314,12 @@ def nextScenario(sessionJoinCode: String, studentIdentifier: String): IO[Either[
                 trimmedText = scenarioText.trim
                 scenarioId = UUID.randomUUID().toString
                 template = ScenarioTemplate(scenarioId, scenarioTitleFrom(trimmedText), trimmedText)
-                scenarioState = ScenarioState(template, 0)
+                createdAt = DateTimeFormatter.ISO_INSTANT.format(Instant.now())
+                scenarioState = ScenarioState(
+                  template,
+                  turnsTaken = 0,
+                  history = List(ScenarioTurn(role = "guide", message = trimmedText, timestamp = Some(createdAt)))
+                )
                 updatedStudents = session.students.map { student =>
                   val isSameStudent =
                     (Option(student.studentId).exists(_.nonEmpty) && student.studentId == aStudent.studentId)
@@ -324,6 +343,81 @@ def nextScenario(sessionJoinCode: String, studentIdentifier: String): IO[Either[
 
   result.value
 
+def handlePromptMessage(sessionJoinCode: String, promptId: String, payload: PromptMessagePayload): IO[Either[ErrorResponse, PromptReply]] =
+  val sanitizedTimestamp = Option(payload.timestamp).filter(_.nonEmpty).getOrElse(DateTimeFormatter.ISO_INSTANT.format(Instant.now()))
+  val trimmedJoinCode = sessionJoinCode.trim
+
+  val action = for
+    sessionDoc <- EitherT(
+      DataBaseService
+        .getSessionByJoinCode(trimmedJoinCode)
+        .map(_.left.map(_ => ErrorResponse("Couldn't find session")))
+    )
+    session: Session = sessionDoc.session
+    student <- EitherT.fromOption[IO](
+      session.students.find(studentMatches(payload.studentId, _)),
+      ErrorResponse("Couldn't find student")
+    )
+    rawScenarioState <- EitherT.fromOption[IO](student.currentScenario, ErrorResponse("Scenario not available"))
+    scenarioState <- ensureScenarioAlignment(payload.scenarioId, sessionDoc.email, session, student, rawScenarioState)
+    playerTurn = ScenarioTurn(role = "player", message = payload.message, timestamp = Some(sanitizedTimestamp))
+    conversationForEval: List[ScenarioTurn] = scenarioState.history ++ List(playerTurn)
+    passResult <- EitherT(
+      GeminiPromptPipeline
+        .evaluateScenario(
+          scenarioState.template.narrative,
+          conversationForEval.filter(_.role == "player").map(_.message),
+          conversationForEval.filterNot(_.role == "player").map(_.message)
+        )
+    )
+    studentStateJson = buildStudentStateJson(session, student)
+    scenarioContextJson = buildScenarioContextJson(scenarioState.template.key, scenarioState.template.narrative, conversationForEval)
+    response <-
+      if passResult.resolved then
+        for
+          resolution <- EitherT(
+            GeminiPromptPipeline.generateResolution(
+              studentStateJson,
+              scenarioContextJson,
+              buildPassEvaluatorJson(passResult)
+            )
+          )
+          merged <- EitherT.fromEither[IO](
+            applyResolutionToStudent(
+              session,
+              student,
+              scenarioState,
+              promptId,
+              resolution
+            )
+          )
+          (updatedSession, promptReply) = merged
+          _ <- EitherT(updateSession(sessionDoc.email, updatedSession))
+        yield promptReply
+      else
+        for
+          continuation <- EitherT(
+            GeminiPromptPipeline.generateContinuation(
+              studentStateJson,
+              scenarioContextJson,
+              payload.message,
+              passResult.reasoning
+            )
+          )
+          updatedSessionWithReply = applyContinuationToStudent(
+            session,
+            student,
+            scenarioState,
+            conversationForEval,
+            continuation,
+            promptId
+          )
+          _ <- EitherT(updateSession(sessionDoc.email, updatedSessionWithReply.session))
+        yield updatedSessionWithReply.reply
+  yield response
+
+  action.value
+
 private def scenarioTitleFrom(text: String): String =
   val trimmed = text.trim
   if trimmed.isEmpty then "Scenario"
@@ -335,6 +429,240 @@ private def scenarioTitleFrom(text: String): String =
       else if firstLine.length <= 80 then firstLine.trim
       else firstLine.take(80).trim
     if candidate.nonEmpty then candidate else "Scenario"
+
+private case class ContinuationOutcome(session: Session, reply: PromptReply)
+
+private def replaceStudentInSession(session: Session, updated: StudentUser): Session =
+  session.copy(
+    students = session.students.map { current =>
+      if current.studentId == updated.studentId || current.userName == updated.userName then updated else current
+    }
+  )
+
+private def studentMatches(identifier: String, student: StudentUser): Boolean =
+  student.studentId == identifier || student.userName == identifier
+
+private def ensureScenarioAlignment(
+  requestedScenarioId: String,
+  sessionEmail: String,
+  session: Session,
+  student: StudentUser,
+  state: ScenarioState
+): EitherT[IO, ErrorResponse, ScenarioState] =
+  val requested = normalizeScenarioId(requestedScenarioId)
+  val actual = normalizeScenarioId(state.template.key)
+
+  if requested.isEmpty then
+    EitherT.rightT(state)
+  else if actual.isEmpty then
+    val patchedState = state.copy(template = state.template.copy(key = requestedScenarioId.trim))
+    val updatedStudent = student.copy(currentScenario = Some(patchedState))
+    val updatedSession = replaceStudentInSession(session, updatedStudent)
+    EitherT(updateSession(sessionEmail, updatedSession)).map(_ => patchedState)
+  else if requested == actual then
+    EitherT.rightT(state)
+  else
+    val hasPlayerTurns = state.history.exists(_.role == "player")
+    if hasPlayerTurns then
+      EitherT.leftT(ErrorResponse(s"Scenario mismatch (expected ${state.template.key}, got ${requestedScenarioId})"))
+    else
+      val patchedState = state.copy(template = state.template.copy(key = requestedScenarioId.trim))
+      val updatedStudent = student.copy(currentScenario = Some(patchedState))
+      val updatedSession = replaceStudentInSession(session, updatedStudent)
+      EitherT(updateSession(sessionEmail, updatedSession)).map(_ => patchedState)
+
+private def normalizeScenarioId(raw: String): String = raw.trim.toLowerCase(Locale.ROOT)
+
+private def buildStudentStateJson(session: Session, student: StudentUser): Json =
+  val stats = student.stats
+  val defaultLanguage = sys.env.getOrElse("GEMINI_DEFAULT_LANGUAGE", "en").trim
+  val languageJson = Option(defaultLanguage).filter(_.nonEmpty).map(Json.fromString)
+  val habitJson = Json.obj(
+    "risk_taking" -> Json.fromDoubleOrNull(stats.riskTaking),
+    "over_trusting" -> Json.fromDoubleOrNull(stats.overTrusting),
+    "laziness" -> Json.fromDoubleOrNull(stats.laziness),
+    "impulsiveness" -> Json.fromDoubleOrNull(stats.impulsiveness)
+  )
+  val completed = student.completedScenarios.distinct
+  val baseFields = List(
+    "student_id" -> Json.fromString(student.studentId),
+    "location_city" -> Json.fromString(session.location),
+    "monthly_income_eur" -> Json.fromDoubleOrNull(session.monthlyIncome),
+    "wealth_score" -> Json.fromDoubleOrNull(stats.wealth),
+    "happiness_score_percent" -> Json.fromDoubleOrNull(stats.happiness),
+    "health_score_percent" -> Json.fromDoubleOrNull(stats.health),
+    "habit_scores" -> habitJson,
+    "long_term_effects" -> Json.arr(stats.longTermEffects.map(Json.fromString)*),
+    "completed_scenarios" -> Json.arr(completed.map(Json.fromString)*)
+  )
+  val optional = languageJson.map(lang => "student_language" -> lang).toList
+  Json.obj((baseFields ++ optional)*)
+
+private def buildScenarioContextJson(scenarioId: String, narrative: String, history: List[ScenarioTurn]): Json =
+  val userMessages = history.filter(_.role == "player").map(_.message)
+  val modelMessages = history.filterNot(_.role == "player").map(_.message)
+  Json.obj(
+    "scenario_id" -> Json.fromString(scenarioId),
+    "scenario" -> Json.fromString(narrative),
+    "userMessageHistory" -> Json.arr(userMessages.map(Json.fromString)*),
+    "modelMessageHistory" -> Json.arr(modelMessages.map(Json.fromString)*)
+  )
+
+private def buildPassEvaluatorJson(result: GeminiPromptPipeline.PassEvaluatorResult): Json =
+  Json.obj(
+    "resolved" -> Json.fromBoolean(result.resolved),
+    "confidence" -> Json.fromString("medium"),
+    "reasoning" -> Json.fromString(result.reasoning)
+  )
+
+private def updateSession(email: String, session: Session): IO[Either[ErrorResponse, Unit]] =
+  DataBaseService
+    .updateSession(email, session)
+    .map(
+      _.left.map(err => ErrorResponse(s"Couldn't update session: ${err.getMessage}"))
+        .map(_ => ())
+    )
+
+private def applyContinuationToStudent(
+  session: Session,
+  student: StudentUser,
+  scenarioState: ScenarioState,
+  conversation: List[ScenarioTurn],
+  continuation: String,
+  promptId: String
+): ContinuationOutcome =
+  val guideTurn = ScenarioTurn(
+    role = "guide",
+    message = continuation,
+    timestamp = Some(DateTimeFormatter.ISO_INSTANT.format(Instant.now()))
+  )
+  val updatedScenarioState = scenarioState.copy(
+    turnsTaken = scenarioState.turnsTaken + 1,
+    history = conversation :+ guideTurn
+  )
+  val updatedStudent = student.copy(currentScenario = Some(updatedScenarioState))
+  val updatedSession = replaceStudentInSession(session, updatedStudent)
+  val reply = PromptReply(
+    promptId = promptId,
+    aiReply = continuation,
+    status = "in_progress",
+    accepted = false,
+    effects = List.empty,
+    effectsSummary = None,
+    updatedStats = None
+  )
+  ContinuationOutcome(updatedSession, reply)
+
+private def applyResolutionToStudent(
+  session: Session,
+  student: StudentUser,
+  scenarioState: ScenarioState,
+  promptId: String,
+  resolution: GeminiPromptPipeline.ScenarioResolutionResult
+): Either[ErrorResponse, (Session, PromptReply)] =
+  for
+    updatedStats <- mergeStudentStats(student.stats, resolution.updatedStudentState)
+    existingSummaries = (student.completedScenarios ++ student.stats.scenariosDone).foldLeft(List.empty[String]) { (acc, entry) =>
+      if entry.nonEmpty && !acc.exists(_.equalsIgnoreCase(entry)) then acc :+ entry else acc
+    }
+    completedSummaries = extractCompletedScenarioSummaries(
+      resolution.updatedStudentState,
+      existingSummaries,
+      scenarioState.template.title
+    )
+  yield
+    val nextStats = updatedStats.copy(scenariosDone = completedSummaries)
+    val updatedStudent = student.copy(
+      currentScenario = None,
+      completedScenarios = completedSummaries,
+      stats = nextStats
+    )
+    val updatedSession = replaceStudentInSession(session, updatedStudent)
+    val effects = calculateEffects(student.stats, nextStats)
+    val reply = PromptReply(
+      promptId = promptId,
+      aiReply = resolution.continuationText,
+      status = "completed",
+      accepted = true,
+      effects = effects,
+      effectsSummary = Some(resolution.continuationText),
+      updatedStats = Some(nextStats)
+    )
+    (updatedSession, reply)
+
+private def mergeStudentStats(existing: StudentStats, stateJson: Json): Either[ErrorResponse, StudentStats] =
+  val cursor = stateJson.hcursor
+  def readDouble(keys: String*)(fallback: Double): Double =
+    keys.iterator
+      .map(key => cursor.get[Double](key).toOption)
+      .collectFirst { case Some(value) => value }
+      .getOrElse(fallback)
+
+  def readInt(keys: String*)(fallback: Double): Double = readDouble(keys*)(fallback)
+
+  val wealth = readDouble("wealth_score", "wealthScore")(existing.wealth)
+  val happiness = readInt("happiness_score_percent", "happinessScorePercent")(existing.happiness)
+  val health = readInt("health_score_percent", "healthScorePercent")(existing.health)
+
+  val habitCursor = cursor.downField("habit_scores").focus.orElse(cursor.downField("habitScores").focus)
+  def readHabit(key: String, fallback: Double): Double =
+    habitCursor.flatMap(_.hcursor.get[Double](key).toOption).getOrElse(fallback)
+  val riskTaking = readHabit("risk_taking", existing.riskTaking)
+  val overTrusting = readHabit("over_trusting", existing.overTrusting)
+  val laziness = readHabit("laziness", existing.laziness)
+  val impulsiveness = readHabit("impulsiveness", existing.impulsiveness)
+
+  val longTermEffects = cursor
+    .downField("long_term_effects")
+    .focus
+    .orElse(cursor.downField("longTermEffects").focus)
+    .map(_.asArray.getOrElse(Vector.empty).toList.flatMap(_.asString))
+    .getOrElse(existing.longTermEffects)
+
+  val updatedStats = existing.copy(
+    wealth = wealth,
+    happiness = clampPercent(happiness),
+    health = clampPercent(health),
+    riskTaking = riskTaking,
+    overTrusting = overTrusting,
+    laziness = laziness,
+    impulsiveness = impulsiveness,
+    longTermEffects = longTermEffects
+  )
+
+  Right(updatedStats)
+
+private def extractCompletedScenarioSummaries(stateJson: Json, fallback: List[String], scenarioTitle: String): List[String] =
+  val cursor = stateJson.hcursor
+  val extracted = cursor
+    .downField("completed_scenarios")
+    .focus
+    .orElse(cursor.downField("completedScenarios").focus)
+    .map(_.asArray.getOrElse(Vector.empty).toList.flatMap(_.asString))
+    .getOrElse(Nil)
+  val merged = (fallback ++ extracted).foldLeft(List.empty[String]) { (acc, entry) =>
+    if entry.nonEmpty && !acc.exists(_.equalsIgnoreCase(entry)) then acc :+ entry else acc
+  }
+  val withCurrent =
+    if scenarioTitle.nonEmpty && !merged.exists(_.equalsIgnoreCase(scenarioTitle)) then merged :+ scenarioTitle else merged
+  withCurrent
+
+private def calculateEffects(previous: StudentStats, updated: StudentStats): List[StatEffect] =
+  val comparisons = List(
+    ("wealth", updated.wealth - previous.wealth),
+    ("health", updated.health - previous.health),
+    ("happiness", updated.happiness - previous.happiness),
+    ("riskTaking", updated.riskTaking - previous.riskTaking),
+    ("overTrusting", updated.overTrusting - previous.overTrusting),
+    ("laziness", updated.laziness - previous.laziness),
+    ("impulsiveness", updated.impulsiveness - previous.impulsiveness)
+  )
+  comparisons.collect {
+    case (stat, delta) if math.abs(delta) >= 0.01 => StatEffect(stat, math.round(delta * 100.0) / 100.0)
+  }
+
+private def clampPercent(value: Double): Double =
+  math.max(0.0, math.min(100.0, value))
 
 def getSessionRoster(professorEmail: String, sessionId: String): IO[Either[ErrorResponse, SessionRosterResponse]] =
   getSession(professorEmail, sessionId)

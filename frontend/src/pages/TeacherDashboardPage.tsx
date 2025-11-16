@@ -73,6 +73,23 @@ export function TeacherDashboardPage() {
   const [error, setError] = useState<string | null>(null)
   const [roster, setRoster] = useState<StudentRosterEntry[]>([])
 
+  const applyRosterUpdate = useCallback(
+    (sessionId: string, students: StudentRosterEntry[]) => {
+      setSessions((previous) =>
+        previous.map((session) =>
+          session.sessionId === sessionId
+            ? { ...session, playerCount: students.length }
+            : session,
+        ),
+      )
+
+      if (sessionId === selectedSessionId) {
+        setRoster(students)
+      }
+    },
+    [selectedSessionId],
+  )
+
   const selectedSession = useMemo(
     () => sessions.find((session) => session.sessionId === selectedSessionId) ?? null,
     [selectedSessionId, sessions],
@@ -149,7 +166,13 @@ export function TeacherDashboardPage() {
             : session,
         ),
       )
-      setRoster((previous) => previous)
+      try {
+        const rosterResponse = await api.fetchTeacherSessionRoster(selectedSession.sessionId)
+        applyRosterUpdate(selectedSession.sessionId, rosterResponse.students)
+      } catch (rosterError) {
+        console.error('Unable to refresh roster after starting session', rosterError)
+      }
+      await refreshSessions()
     } catch (startError) {
       if (startError instanceof ApiError) {
         setError(startError.message)
@@ -200,53 +223,37 @@ export function TeacherDashboardPage() {
 
     let cancelled = false
 
-    const loadRoster = async () => {
+    const loadRoster = async (withSpinner: boolean) => {
+      if (withSpinner) {
+        setLoadingRoster(true)
+      }
       try {
         const response = await api.fetchTeacherSessionRoster(selectedSessionId)
-        if (cancelled) return
-        setRoster(response.students)
-        setSessions((previous) =>
-          previous.map((session) =>
-            session.sessionId === selectedSessionId
-              ? { ...session, playerCount: response.students.length }
-              : session,
-          ),
-        )
+        if (!cancelled) {
+          applyRosterUpdate(selectedSessionId, response.students)
+        }
       } catch (rosterError) {
         if (!cancelled) {
           console.error('Failed to fetch roster', rosterError)
         }
+      } finally {
+        if (withSpinner && !cancelled) {
+          setLoadingRoster(false)
+        }
       }
     }
 
-    setRoster([])
-    setLoadingRoster(true)
-
-    loadRoster()
-      .catch((rosterError) => {
-        if (!cancelled) {
-          console.error('Failed to fetch roster', rosterError)
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoadingRoster(false)
-        }
-      })
+    loadRoster(true)
 
     const pollId = window.setInterval(() => {
-      loadRoster().catch((rosterError) => {
-        if (!cancelled) {
-          console.error('Failed to fetch roster', rosterError)
-        }
-      })
-    }, 5000)
+      loadRoster(false)
+    }, 3000)
 
     return () => {
       cancelled = true
       window.clearInterval(pollId)
     }
-  }, [view, selectedSessionId])
+  }, [view, selectedSessionId, applyRosterUpdate])
 
   const handleLogout = () => {
     clearTeacherAuth()

@@ -2,6 +2,9 @@ package models.implicitconversions
 
 import models.json.*
 import models.mongo.*
+import java.util.Locale
+
+private inline def normalizeJoinCode(code: String): String = code.trim.toUpperCase(Locale.ROOT)
 
 
 given Conversion[StudentStatsMongo, StudentStats] with
@@ -13,6 +16,7 @@ given Conversion[StudentStatsMongo, StudentStats] with
     overTrusting = x.overTrusting,
     laziness = x.laziness,
     impulsiveness = x.impulsiveness,
+    scenariosDone = x.scenariosDone,
     longTermEffects = x.longTermEffects
   )
 
@@ -27,7 +31,8 @@ given Conversion[StudentHabitsMongo, StudentHabits] with
 given Conversion[ScenarioStateMongo, ScenarioState] with
   override def apply(x: ScenarioStateMongo): ScenarioState = ScenarioState(
     template = x.template,
-    turnsTaken = x.turnsTaken
+    turnsTaken = x.turnsTaken,
+    history = x.history.map(turn => ScenarioTurn(role = turn.role, message = turn.message, timestamp = turn.timestamp))
   )
 
 given Conversion[ScenarioTemplateMongo, ScenarioTemplate] with
@@ -37,12 +42,19 @@ given Conversion[ScenarioTemplateMongo, ScenarioTemplate] with
     narrative = x.narrative
   )
 
+given Conversion[ScenarioTurnMongo, ScenarioTurn] with
+  override def apply(x: ScenarioTurnMongo): ScenarioTurn = ScenarioTurn(
+    role = x.role,
+    message = x.message,
+    timestamp = x.timestamp
+  )
+
 given Conversion[StudentUserMongo, StudentUser] with
   override def apply(x: StudentUserMongo): StudentUser = StudentUser(
     studentId = x._id.toHexString,
     userName = x.userName,
     currentScenario = x.currentScenario.map(identity),
-    completedScenarios = x.completedScenarios.map(_.toString),
+    completedScenarios = x.completedScenarios,
     stats = x.stats,
     habits = x.habits
   )
@@ -50,7 +62,7 @@ given Conversion[StudentUserMongo, StudentUser] with
 given Conversion[SessionMongo, Session] with
   override def apply(x: SessionMongo): Session = Session(
     sessionName = x.sessionName,
-    sessionJoinCode = x.sessionJoinCode,
+    sessionJoinCode = normalizeJoinCode(x.sessionJoinCode),
     location = x.location,
     monthlyIncome = x.monthlyIncome,
     students = x.students.map(identity),

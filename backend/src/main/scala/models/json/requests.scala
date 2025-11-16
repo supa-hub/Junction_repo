@@ -31,9 +31,16 @@ final case class ScenarioTemplate(
   narrative: String
 ) derives ReadWriter
 
+final case class ScenarioTurn(
+  role: String,
+  message: String,
+  timestamp: Option[String] = None
+) derives ReadWriter
+
 final case class ScenarioState(
   template: ScenarioTemplate,
-  turnsTaken: Int
+  turnsTaken: Int,
+  history: List[ScenarioTurn] = List.empty
 ) derives ReadWriter
 
 final case class SessionPayload(
@@ -73,6 +80,7 @@ final case class StudentStats(
   overTrusting: models.Number,
   laziness: models.Number,
   impulsiveness: models.Number,
+  scenariosDone: List[String],
   longTermEffects: List[String]
 ) derives ReadWriter
 
@@ -109,6 +117,8 @@ package circecoders:
   import models.historycodecs.given
   given scenarioTemplateEncoder: Encoder[ScenarioTemplate] = deriveEncoder
   given scenarioTemplateDecoder: Decoder[ScenarioTemplate] = deriveDecoder
+  given scenarioTurnEncoder: Encoder[ScenarioTurn] = deriveEncoder
+  given scenarioTurnDecoder: Decoder[ScenarioTurn] = deriveDecoder
   given scenarioEncoder: Encoder[ScenarioState] = deriveEncoder
   given scenarioDecoder: Decoder[ScenarioState] = deriveDecoder
   given scenarioOptionEncoder: Encoder[Option[ScenarioState]] = deriveEncoder
