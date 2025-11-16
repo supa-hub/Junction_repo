@@ -50,7 +50,6 @@ export interface SessionStarted {
 export interface JoinSessionResponse {
   sessionId: string
   studentId: string
-  seatNumber: number
   initialStats: StudentStats
   sessionStatus?: SessionStatus
 }

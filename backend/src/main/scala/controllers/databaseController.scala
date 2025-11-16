@@ -1,5 +1,6 @@
 package controllers
 
+import cats.data.EitherT
 import cats.effect.IO
 import fs2.{Chunk, Pipe, Stream}
 import models.SessionStatus
@@ -8,7 +9,9 @@ import models.json.{
   AnalyticsSummary,
   ClassroomSummary,
   ErrorResponse,
+  StudentDashboardResponse,
   HabitAverage,
+  JoinSessionResponse,
   LeaderBoard,
   LeaderBoardEntry,
   LeaderboardHighlight,
@@ -19,11 +22,24 @@ import models.json.{
   ScenarioView,
   Session,
   ScenarioState,
-  SessionPayload, SessionStarted, SessionSummary, StatDistribution, StatReason, StudentInsights, StudentPace, StudentStats, StudentUser, SuccessfulResponse, ScenarioTemplate}
+  SessionPayload,
+  SessionStarted,
+  SessionSummary,
+  StatDistribution,
+  StatReason,
+  StudentInsights,
+  StudentPace,
+  StudentStats,
+  StudentUser,
+  SuccessfulResponse,
+  ScenarioTemplate
+}
+import models.mongo.StudentUserMongo
 import services.{DataBaseService, JWTService}
 
 import java.time.Instant
 import java.time.format.DateTimeFormatter
+import mongo4cats.bson.ObjectId
 
 /**
  * Used for passing data from the routes to the database
@@ -81,13 +97,58 @@ def getStudentData(professorEmail: String, sessionId: String, studentName: Strin
 def getStudentStats(professorEmail: String, sessionId: String, studentName: String): IO[Either[ErrorResponse, StudentStats]] =
   getStudentData(professorEmail, sessionId, studentName).map(_.map(_.stats))
 
+def getStudentDashboard(sessionJoinCode: String, studentId: String): IO[Either[ErrorResponse, StudentDashboardResponse]] =
+  val dashboard = for
+    studentObjectId <- EitherT.fromEither[IO](ObjectId.from(studentId).left.map(_ => ErrorResponse("Invalid student id")))
+    sessionDoc <- EitherT(
+      DataBaseService
+        .getSessionByJoinCode(sessionJoinCode)
+        .map(_.left.map(_ => ErrorResponse("Couldn't find session")))
+    )
+    student <- EitherT.fromOption[IO](
+      sessionDoc.session.students.find(_. _id == studentObjectId),
+      ErrorResponse("Couldn't find student")
+    )
+  yield StudentDashboardResponse(
+    stats = student.stats,
+    sessionStatus = Some(sessionDoc.session.status.apiValue)
+  )
 
-def addStudent(sessionJoinCode: String, studentName: String): IO[Either[ErrorResponse, SuccessfulResponse]] =
+  dashboard.value
+
+
+def addStudent(sessionJoinCode: String, studentName: String): IO[Either[ErrorResponse, JoinSessionResponse]] =
+  val studentDoc = StudentUserMongo(userName = studentName)
   DataBaseService
-    .addData(studentName, sessionJoinCode)
-    .map {
-      case Right(res) => Right(SuccessfulResponse("Successfully added student to session"))
-      case Left(err) => Left(ErrorResponse(s"Couldn't create the user due to an error: ${err.getMessage}"))
+    .addStudentToSession(studentDoc, sessionJoinCode)
+    .flatMap {
+      case Left(err) => IO.pure(Left(ErrorResponse(s"Couldn't create the user due to an error: ${err.getMessage}")))
+      case Right(result) if result.getMatchedCount == 0 => IO.pure(Left(ErrorResponse("Couldn't find session")))
+      case Right(result) if result.getModifiedCount == 0 => IO.pure(Left(ErrorResponse("Student could not be added")))
+      case Right(_) =>
+        val stats: StudentStats = studentDoc.stats
+        DataBaseService
+          .getSessionByJoinCode(sessionJoinCode)
+          .map {
+            case Right(sessionDoc) =>
+              Right(
+                JoinSessionResponse(
+                  sessionId = sessionDoc.session.sessionJoinCode,
+                  studentId = studentDoc._id.toHexString,
+                  initialStats = stats,
+                  sessionStatus = Some(sessionDoc.session.status.apiValue)
+                )
+              )
+            case Left(_) =>
+              Right(
+                JoinSessionResponse(
+                  sessionId = sessionJoinCode,
+                  studentId = studentDoc._id.toHexString,
+                  initialStats = stats,
+                  sessionStatus = None
+                )
+              )
+          }
     }
 
 

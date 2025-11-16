@@ -177,13 +177,15 @@ object DataBaseService:
    * @tparam A type which can be converted into SessionMongo
    * @return
    */
-  def addData[A](userName: String, aSessionCode: String)(using Conversion[A, SessionMongo]): IO[Either[Throwable, UpdateResult]] =
-    val filter = userSessionFilter(aSessionCode)
-    val data = StudentUserMongo(userName = userName)
-    val update = Update.addToSet(s"${sessionField}.students", data.toBson) // need to call .toBson so that update is successful
+  def addStudentToSession(student: StudentUserMongo, sessionJoinCode: String): IO[Either[Throwable, UpdateResult]] =
+    val filter = userSessionFilter(sessionJoinCode)
+    val update = Update.addToSet(s"${sessionField}.students", student.toBson)
     professorSessionCollection
       .flatMap(_.updateOne(filter, update))
       .attempt
+
+  def addData[A](userName: String, aSessionCode: String)(using Conversion[A, SessionMongo]): IO[Either[Throwable, UpdateResult]] =
+    addStudentToSession(StudentUserMongo(userName = userName), aSessionCode)
 
   private def addMultiple[A](userNames: List[String], aSessionCode: String)(using Conversion[A, SessionMongo]): IO[Either[Throwable, UpdateResult]] =
     val filter = sessionFilter(aSessionCode)
@@ -333,6 +335,16 @@ object DataBaseService:
       .map(_.toRight(Throwable("Couldn't find session")))
       .map(_.map(_.session))
       .map(_.map(c.apply))
+      .attempt
+      .map(_.flatten)
+
+  def getSessionByJoinCode(sessionJoinCode: String): IO[Either[Throwable, ProfessorSessionMongo]] =
+    val filter = userSessionFilter(sessionJoinCode)
+
+    professorSessionCollection
+      .map(_.find(filter))
+      .flatMap(_.first)
+      .map(_.toRight(Throwable("Couldn't find session")))
       .attempt
       .map(_.flatten)
 

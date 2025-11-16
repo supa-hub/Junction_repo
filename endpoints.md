@@ -87,13 +87,13 @@ Students join a session using the teacher-provided code and nickname.
   {
     "sessionId": "sess_72cf",
     "studentId": "stud_19ab",
-    "seatNumber": 17,
     "initialStats": {
       "wealth": 0,
       "health": 0,
       "happiness": 0,
       "scenariosDone": []
-    }
+    },
+    "sessionStatus": "waiting_for_start"
   }
   ```
 - **Errors**: `404` invalid join code, `409` nickname already in use.

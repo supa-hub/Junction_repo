@@ -8,7 +8,7 @@ import controllers.{
   createNewProfessor,
   createNewSession,
   getLeaderBoard,
-  getStudentStats,
+  getStudentDashboard,
   getTeacherSessionsSummary,
   loginProfessor,
   getProgress,
@@ -18,7 +18,7 @@ import controllers.{
   nextScenario,
   addStudent
 }
-import models.json.{CreateTeacherSessionPayload, ErrorResponse, JoinSessionPayload, LoginPayload, ProfessorUser, PromptMessagePayload, SessionPayload, SuccessfulResponse}
+import models.json.{CreateTeacherSessionPayload, ErrorResponse, JoinSessionPayload, JoinSessionResponse, LoginPayload, ProfessorUser, PromptMessagePayload, SessionPayload, SuccessfulResponse}
 import models.json.circecoders.given
 import models.json.http4sentities.given
 import models.json.http4sencoders.given
@@ -122,6 +122,23 @@ object JsonRoutes:
           payload => EitherT(loginProfessor(payload))
         )
         .toResponse
+
+    case req @ POST -> Root / "api" / "sessions" / joinCode / "students" =>
+      req
+        .attemptAs[JoinSessionPayload]
+        .biflatMap[ErrorResponse, JoinSessionResponse](
+          err => EitherT.leftT(ErrorResponse(s"Received data could not be decoded: ${err.getMessage}")),
+          payload => EitherT(addStudent(joinCode, payload.userName))
+        )
+        .toResponse
+
+    case GET -> Root / "api" / "sessions" / sessionId / "students" / studentId =>
+      getStudentDashboard(sessionId, studentId)
+        .flatMap {
+          case Left(err) if err.err == "Couldn't find session" || err.err == "Couldn't find student" => NotFound(err)
+          case Left(err) => BadRequest(err)
+          case Right(data) => Ok(data)
+        }
   }
 
   private val authed = AuthedRoutes.of[ProfessorUser, IO] {
@@ -149,29 +166,6 @@ object JsonRoutes:
         .compile
         .toList
         .flatMap(list => Ok(list))
-
-    case req @ POST -> Root / "api" / "sessions" / joinCode / "students" as user =>
-      req.req
-        .attemptAs[JoinSessionPayload]
-        .foldF(
-          err => BadRequest(ErrorResponse(s"Received data could not be decoded: ${err.getMessage}")),
-          payload => addStudent(joinCode, payload.userName)
-            .flatMap(
-              _.fold(
-                err => BadRequest(err),
-                data => Ok(data)
-              )
-            )
-        )
-
-    case GET -> Root / "api" / "sessions" / sessionId / "students" / studentId as user =>
-      getStudentStats(user.email, sessionId, studentId)
-        .flatMap(
-          _.fold(
-            err => BadRequest(err),
-            data => Ok(data)
-          )
-        )
 
     case GET -> Root / "api" / "sessions" / sessionId / "next-scenario" :? StudentIdParam(studentId) as user =>
       nextScenario(user.email, sessionId, studentId)

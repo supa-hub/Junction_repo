@@ -3,6 +3,18 @@ package models.json
 final case class SuccessfulResponse(res: String = "success")
 final case class ErrorResponse(err: String)
 
+final case class JoinSessionResponse(
+  sessionId: String,
+  studentId: String,
+  initialStats: StudentStats,
+  sessionStatus: Option[String] = None
+)
+
+final case class StudentDashboardResponse(
+  stats: StudentStats,
+  sessionStatus: Option[String] = None
+)
+
 final case class LeaderBoardEntry(
   rank: Int,
   name: String,
@@ -67,6 +79,9 @@ package circecoders:
   given responseDecoder: Decoder[SuccessfulResponse] = deriveDecoder[SuccessfulResponse]
   given errorResponseEncoder: Encoder[ErrorResponse] = deriveEncoder[ErrorResponse]
   given errorResponseDecoder: Decoder[ErrorResponse] = deriveDecoder[ErrorResponse]
+  given joinSessionResponseEncoder: Encoder[JoinSessionResponse] = deriveEncoder[JoinSessionResponse]
+  given studentDashboardResponseEncoder: Encoder[StudentDashboardResponse] = deriveEncoder[StudentDashboardResponse]
+  given studentDashboardResponseDecoder: Decoder[StudentDashboardResponse] = deriveDecoder[StudentDashboardResponse]
   given entryEncoder: Encoder[LeaderBoardEntry] = deriveEncoder
   given entryDecoder: Decoder[LeaderBoardEntry] = deriveDecoder
   given leaderBoardEncoder: Encoder[LeaderBoard] = deriveEncoder
@@ -96,6 +111,8 @@ package http4sentities:
   import org.http4s.circe.jsonEncoderOf
   given responseEntity: EntityEncoder[IO, SuccessfulResponse] = jsonEncoderOf[IO, SuccessfulResponse]
   given errorResponseEntity: EntityEncoder[IO, ErrorResponse] = jsonEncoderOf[IO, ErrorResponse]
+  given joinSessionResponseEntity: EntityEncoder[IO, JoinSessionResponse] = jsonEncoderOf
+  given studentDashboardResponseEntity: EntityEncoder[IO, StudentDashboardResponse] = jsonEncoderOf
   given entryResponseEntity: EntityEncoder[IO, LeaderBoardEntry] = jsonEncoderOf
   given leaderBoardResponseEntity: EntityEncoder[IO, LeaderBoard] = jsonEncoderOf
   given coreScenarioResponseEntity: EntityEncoder[IO, CoreScenarioProgress] = jsonEncoderOf

@@ -43,7 +43,6 @@ object GameSimulationService:
   final case class JoinSessionResponse(
     sessionId: String,
     studentId: String,
-    seatNumber: Int,
     initialStats: StudentStats
   )
   final case class StudentDashboard(stats: StudentStats)
@@ -266,11 +265,10 @@ object GameSimulationService:
             else
               val studentId = generateId("stud")
               val stats = emptyStats
-              val seatNumber = state.students.size + 1
-              val studentState = StudentState(studentId, userName, seatNumber, stats, Vector.empty, None)
+                  val studentState = StudentState(studentId, userName, state.students.size + 1, stats, Vector.empty, None)
               val updated = state.copy(students = state.students + (studentId -> studentState))
               sessions.update(sessionId, updated)
-              Right(JoinSessionResponse(updated.sessionId, studentId, seatNumber, stats))
+                  Right(JoinSessionResponse(updated.sessionId, studentId, stats))
   }
 
   def studentDashboard(sessionId: String, studentId: String): IO[Either[ServiceError, StudentDashboard]] = IO {
