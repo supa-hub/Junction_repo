@@ -100,6 +100,15 @@ def getStudentData(professorEmail: String, sessionId: String, studentName: Strin
 def getStudentStats(professorEmail: String, sessionId: String, studentName: String): IO[Either[ErrorResponse, StudentStats]] =
   getStudentData(professorEmail, sessionId, studentName).map(_.map(_.stats))
 
+def deleteTeacherSession(professorEmail: String, sessionId: String): IO[Either[ErrorResponse, SuccessfulResponse]] =
+  DataBaseService
+    .deleteSession(professorEmail, sessionId)
+    .map {
+      case Right(result) if result.getDeletedCount > 0 => Right(SuccessfulResponse("Session deleted"))
+      case Right(_) => Left(ErrorResponse("Couldn't find session"))
+      case Left(err) => Left(ErrorResponse(s"Couldn't delete the session due to an error: ${err.getMessage}"))
+    }
+
 def getStudentDashboard(sessionJoinCode: String, studentId: String): IO[Either[ErrorResponse, StudentDashboardResponse]] =
   val dashboard = for
     studentObjectId <- EitherT.fromEither[IO](ObjectId.from(studentId).left.map(_ => ErrorResponse("Invalid student id")))

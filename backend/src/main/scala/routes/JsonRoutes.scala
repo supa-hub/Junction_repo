@@ -17,7 +17,8 @@ import controllers.{
   startSession,
   nextScenario,
   addStudent,
-  getSessionRoster
+  getSessionRoster,
+  deleteTeacherSession
 }
 import models.json.{CreateTeacherSessionPayload, ErrorResponse, JoinSessionPayload, JoinSessionResponse, LoginPayload, ProfessorUser, PromptMessagePayload, SessionPayload, SuccessfulResponse}
 import models.json.circecoders.given
@@ -184,6 +185,14 @@ object JsonRoutes:
             data => Ok(data)
           )
         )
+
+    case DELETE -> Root / "api" / "teachers" / "sessions" / sessionId as user =>
+      deleteTeacherSession(user.email, sessionId)
+        .flatMap {
+          case Left(err) if err.err == "Couldn't find session" => NotFound(err)
+          case Left(err) => BadRequest(err)
+          case Right(data) => Ok(data)
+        }
 
     case GET -> Root / "api" / "sessions" / sessionId / "leaderboard" as user =>
       getLeaderBoard(user.email, sessionId)

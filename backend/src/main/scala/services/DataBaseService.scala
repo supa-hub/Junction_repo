@@ -3,7 +3,7 @@ package services
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import com.mongodb.client.model.Indexes
-import com.mongodb.client.result.UpdateResult
+import com.mongodb.client.result.{UpdateResult, DeleteResult}
 import models.Number
 import models.mongo.bsonencoders.given
 import models.mongo.mongocodecs.given
@@ -253,6 +253,12 @@ object DataBaseService:
     yield result
 
     action.attempt
+
+  def deleteSession(email: String, sessionId: String): IO[Either[Throwable, DeleteResult]] =
+    val filter = userFilter(email) && userSessionFilter(sessionId)
+    professorSessionCollection
+      .flatMap(_.deleteOne(filter))
+      .attempt
 
 
   /**

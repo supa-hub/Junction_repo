@@ -181,7 +181,9 @@ OUTPUT FORMAT
   object ScenarioPromptData:
     def from(session: Session, student: StudentUser): ScenarioPromptData =
       ScenarioPromptData(
-        studentId = Some(student.userName).filter(_.nonEmpty),
+        studentId =
+          Option(student.studentId).filter(_.nonEmpty)
+            .orElse(Some(student.userName).filter(_.nonEmpty)),
         location = Option.when(session.location.nonEmpty)(session.location),
         monthlyIncome = session.monthlyIncome,
         stats = student.stats,
@@ -223,7 +225,9 @@ OUTPUT FORMAT
               parseScenarioTexts(response.body()) match
                 case Left(err) => Left(ErrorResponse(err))
                 case Right(texts) =>
-                  val scenarioText = texts.headOption.getOrElse(defaultScenarioText(data))
+                  val scenarioText =
+                    if texts.nonEmpty then texts.mkString.trim
+                    else defaultScenarioText(data)
                   Right(scenarioText)
           }
 
@@ -305,17 +309,42 @@ OUTPUT FORMAT
     Json.obj((baseFields ++ arrays)*)
 
   private def parseScenarioTexts(body: String): Either[String, List[String]] =
+    val trimmed = body.trim
+    if trimmed.isEmpty then Right(Nil)
+    else
+      parser.parse(trimmed) match
+        case Right(json) => extractTextsFromJson(json)
+        case Left(_) => parseStreamedChunks(trimmed)
+
+  private def extractTextsFromJson(json: Json): Either[String, List[String]] =
+    val errorMessages = collectErrors(json)
+    if errorMessages.nonEmpty then Left(errorMessages.mkString("; "))
+    else
+      val texts = json.asArray match
+        case Some(values) => values.toList.flatMap(extractTexts)
+        case None => extractTexts(json)
+      Right(texts.map(_.trim).filter(_.nonEmpty))
+
+  private def collectErrors(json: Json): List[String] =
+    json.asArray match
+      case Some(values) => values.toList.flatMap(collectErrors)
+      case None => json.hcursor.downField("error").downField("message").as[String].toOption.toList
+
+  private def parseStreamedChunks(body: String): Either[String, List[String]] =
     val jsonObjects = body
       .linesIterator
       .map(_.trim)
-      .filter(_.nonEmpty)
-      .flatMap(line => parser.parse(line).toOption)
+      .filter(line => line.nonEmpty && !line.equalsIgnoreCase("data: [DONE]") && !line.equalsIgnoreCase("[DONE]"))
+      .flatMap { line =>
+        val normalized =
+          if line.startsWith("data:") then line.stripPrefix("data:").trim
+          else line
+        if normalized.isEmpty then None
+        else parser.parse(normalized).toOption
+      }
       .toList
 
-    val errorMessages = jsonObjects.flatMap { json =>
-      json.hcursor.downField("error").downField("message").as[String].toOption
-    }
-
+    val errorMessages = jsonObjects.flatMap(collectErrors)
     if errorMessages.nonEmpty then Left(errorMessages.mkString("; "))
     else
       val texts = jsonObjects.flatMap(extractTexts).map(_.trim).filter(_.nonEmpty)

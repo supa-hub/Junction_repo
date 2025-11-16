@@ -353,6 +353,12 @@ export const api = {
     })
   },
 
+  deleteTeacherSession(sessionId: string) {
+    return request<BackendSuccessfulResponse>(`/api/teachers/sessions/${sessionId}`, {
+      method: 'DELETE',
+    })
+  },
+
   joinSession(joinCode: string, userName: string) {
     return request<JoinSessionResponse>(`/api/sessions/${joinCode}/students`, {
       method: 'POST',

@@ -9,6 +9,7 @@ import {
   Play,
   Plus,
   RefreshCw,
+  Trash2,
 } from 'lucide-react'
 
 import { ApiError, api, setAuthToken, type SessionSummary, type StudentRosterEntry } from '../api'
@@ -68,6 +69,7 @@ export function TeacherDashboardPage() {
   const [newClassroom, setNewClassroom] = useState({ name: '', location: '', monthlyIncome: 3500 })
   const [loadingSessions, setLoadingSessions] = useState(false)
   const [loadingRoster, setLoadingRoster] = useState(false)
+  const [startingSession, setStartingSession] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [roster, setRoster] = useState<StudentRosterEntry[]>([])
 
@@ -136,6 +138,8 @@ export function TeacherDashboardPage() {
 
   const handleStartSession = async () => {
     if (!auth || !selectedSession) return
+    setStartingSession(true)
+    setError(null)
     try {
       const started = await api.startTeacherSession(selectedSession.sessionId)
       setSessions((previous) =>
@@ -145,6 +149,7 @@ export function TeacherDashboardPage() {
             : session,
         ),
       )
+      setRoster((previous) => previous)
     } catch (startError) {
       if (startError instanceof ApiError) {
         setError(startError.message)
@@ -152,6 +157,36 @@ export function TeacherDashboardPage() {
         setError(startError.message)
       } else {
         setError('Unable to start the session right now.')
+      }
+    } finally {
+      setStartingSession(false)
+    }
+  }
+
+  const handleDeleteSession = async (sessionId: string) => {
+    if (!auth) return
+    const session = sessions.find((item) => item.sessionId === sessionId)
+    const confirmMessage = session
+      ? `Delete “${session.sessionName}”? Students will no longer be able to join.`
+      : 'Delete this classroom?'
+    if (!window.confirm(confirmMessage)) return
+
+    setError(null)
+    try {
+      await api.deleteTeacherSession(sessionId)
+      if (selectedSessionId === sessionId) {
+        setSelectedSessionId(null)
+        setRoster([])
+        setView('list')
+      }
+      await refreshSessions()
+    } catch (deleteError) {
+      if (deleteError instanceof ApiError) {
+        setError(deleteError.message)
+      } else if (deleteError instanceof Error) {
+        setError(deleteError.message)
+      } else {
+        setError('Unable to delete the classroom right now.')
       }
     }
   }
@@ -309,12 +344,14 @@ export function TeacherDashboardPage() {
             session={selectedSession}
             roster={roster}
             loadingRoster={loadingRoster}
+            startingSession={startingSession}
             onBack={() => {
               setSelectedSessionId(null)
               setRoster([])
               setView('list')
             }}
             onStartSession={handleStartSession}
+            onDeleteSession={handleDeleteSession}
             onViewLeaderboard={() => setView('leaderboard')}
           />
         ) : (
@@ -322,6 +359,7 @@ export function TeacherDashboardPage() {
             sessions={sessions}
             loading={loadingSessions}
             onSelect={handleSelectSession}
+            onDelete={handleDeleteSession}
           />
         )}
       </div>
@@ -333,10 +371,12 @@ function SessionGrid({
   sessions,
   loading,
   onSelect,
+  onDelete,
 }: {
   sessions: SessionSummary[]
   loading: boolean
   onSelect: (sessionId: string) => void
+  onDelete: (sessionId: string) => void
 }) {
   if (loading && sessions.length === 0) {
     return (
@@ -358,11 +398,18 @@ function SessionGrid({
   return (
     <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
       {sessions.map((session) => (
-        <button
+        <div
           key={session.sessionId}
-          type="button"
+          role="button"
+          tabIndex={0}
           onClick={() => onSelect(session.sessionId)}
-          className="rounded-2xl border border-slate-800 bg-slate-900 p-6 text-left transition hover:border-blue-500/60"
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault()
+              onSelect(session.sessionId)
+            }
+          }}
+          className="rounded-2xl border border-slate-800 bg-slate-900 p-6 text-left transition hover:border-blue-500/60 focus:outline-none focus:ring-2 focus:ring-blue-500/60"
         >
           <div className="flex items-center justify-between">
             <div>
@@ -392,7 +439,21 @@ function SessionGrid({
             </div>
           </div>
           <div className="mt-4 text-sm text-blue-300">Open classroom →</div>
-        </button>
+          <div className="mt-4 flex justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              className="border-rose-500/60 text-rose-200"
+              onClick={(event) => {
+                event.stopPropagation()
+                onDelete(session.sessionId)
+              }}
+              onKeyDown={(event) => event.stopPropagation()}
+            >
+              <Trash2 className="mr-2 h-4 w-4" /> Delete classroom
+            </Button>
+          </div>
+        </div>
       ))}
     </div>
   )
@@ -402,18 +463,24 @@ function ClassroomDetail({
   session,
   roster,
   loadingRoster,
+  startingSession,
   onBack,
   onStartSession,
+  onDeleteSession,
   onViewLeaderboard,
 }: {
   session: SessionSummary
   roster: StudentRosterEntry[]
   loadingRoster: boolean
+  startingSession: boolean
   onBack: () => void
   onStartSession: () => void
+  onDeleteSession: (sessionId: string) => void
   onViewLeaderboard: () => void
 }) {
   const activeCount = roster.length
+  const isLive = session.status === 'in_progress'
+  const isCompleted = session.status === 'completed'
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -426,9 +493,32 @@ function ClassroomDetail({
             <p className="text-sm text-slate-400">{session.location || 'Location TBD'} • {activeCount} students</p>
           </div>
         </div>
-        <div className={`rounded-full border px-4 py-1 text-sm ${statusColors(session.status)}`}>
-          {formatStatusLabel(session.status)}
+        <div className="flex flex-wrap items-center gap-3">
+          {isLive && (
+            <span className="flex items-center gap-2 rounded-full bg-green-500/10 px-4 py-1 text-sm font-medium text-green-300">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-green-400" /> Live simulation
+            </span>
+          )}
+          <div className={`rounded-full border px-4 py-1 text-sm ${statusColors(session.status)}`}>
+            {formatStatusLabel(session.status)}
+          </div>
         </div>
+      </div>
+
+      <div>
+        {isLive ? (
+          <div className="rounded-2xl border border-green-500/40 bg-green-500/10 p-4 text-sm text-green-100">
+            Students are receiving live scenarios. Keep this page open to monitor progress in real time.
+          </div>
+        ) : isCompleted ? (
+          <div className="rounded-2xl border border-slate-500/40 bg-slate-500/10 p-4 text-sm text-slate-100">
+            This simulation has wrapped up. You can create a new classroom when you are ready.
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-100">
+            Launch the simulation when your class is ready. Students will remain in the lobby until you start the session.
+          </div>
+        )}
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
@@ -450,13 +540,21 @@ function ClassroomDetail({
         <div className="flex flex-wrap items-center gap-4">
           <Button
             className="bg-green-600 hover:bg-green-700"
-            disabled={session.status === 'in_progress'}
+            disabled={session.status === 'in_progress' || startingSession}
             onClick={onStartSession}
           >
-            <Play className="mr-2 h-4 w-4" /> Start session
+            {startingSession ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
+            {startingSession ? 'Starting…' : 'Start session'}
           </Button>
           <Button variant="outline" className="border-slate-700 text-white" onClick={onViewLeaderboard}>
             <BarChart3 className="mr-2 h-4 w-4" /> View leaderboard
+          </Button>
+          <Button
+            variant="outline"
+            className="border-rose-500/60 text-rose-200"
+            onClick={() => onDeleteSession(session.sessionId)}
+          >
+            <Trash2 className="mr-2 h-4 w-4" /> Delete classroom
           </Button>
         </div>
       </div>

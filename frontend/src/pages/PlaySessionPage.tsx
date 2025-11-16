@@ -6,7 +6,7 @@ import { ApiError, api, type SessionStatus } from '../api'
 import type { PromptReply, ScenarioView, StatEffect, StudentStats } from '../api'
 import { Button } from '../components/ui/button'
 import { cn } from '../components/ui/utils'
-import { loadPlayerSession, persistPlayerSession, type PlayerSession } from '../playerSession'
+import { clearPlayerSession, loadPlayerSession, persistPlayerSession, type PlayerSession } from '../playerSession'
 
 const EURO_FORMATTER = new Intl.NumberFormat('en-US', {
   style: 'currency',
@@ -147,10 +147,17 @@ export function PlaySessionPage() {
       setStats(dashboard.stats)
       setSessionStatus((previous) => dashboard.sessionStatus ?? previous ?? player.sessionStatus ?? null)
     } catch (dashboardError) {
+      if (dashboardError instanceof ApiError && dashboardError.status === 404) {
+        clearPlayerSession(sessionId)
+        setPlayer(null)
+        setError('This classroom is no longer available. Ask your teacher for a fresh code to rejoin.')
+        setSessionStatus('completed')
+        return
+      }
       console.warn('Unable to sync player stats', dashboardError)
       setSessionStatus((previous) => previous ?? player.sessionStatus ?? null)
     }
-  }, [player, sessionId])
+  }, [player, sessionId, setPlayer, setError])
 
   const loadScenario = useCallback(async () => {
     if (!player || !sessionId) return
@@ -158,6 +165,8 @@ export function PlaySessionPage() {
     setStatus('loadingScenario')
     setError(null)
     setResult(null)
+    setScenario(null)
+    setMessages([])
     try {
       const view = await api.fetchNextScenario(sessionId, player.studentId)
       setSessionStatus('in_progress')
@@ -166,15 +175,9 @@ export function PlaySessionPage() {
         {
           id: nextMessageId(),
           sender: 'guide',
-          text: view.title,
-          timestamp: Date.now(),
-          tag: 'Scenario',
-        },
-        {
-          id: nextMessageId(),
-          sender: 'guide',
           text: view.scenarioText,
           timestamp: Date.now(),
+          tag: 'Scenario',
         },
         {
           id: nextMessageId(),
@@ -321,7 +324,7 @@ export function PlaySessionPage() {
   if (!player || !sessionId) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-slate-950 px-4 text-center text-white">
-        <p className="text-lg">We need your classroom code again to resume the game.</p>
+        <p className="text-lg">{error ?? 'We need your classroom code again to resume the game.'}</p>
       </div>
     )
   }
@@ -370,6 +373,13 @@ export function PlaySessionPage() {
           ) : (
             <>
               <div className="mt-4 flex-1 space-y-4 overflow-y-auto pr-2">
+                {status === 'loadingScenario' && (
+                  <div className="flex justify-center">
+                    <div className="flex items-center gap-2 rounded-full border border-white/10 bg-slate-900/80 px-3 py-1 text-xs text-slate-300">
+                      <Loader2 className="h-4 w-4 animate-spin" /> Generating a new scenario, please wait...
+                    </div>
+                  </div>
+                )}
                 {messages.map((message) => (
                   <div key={message.id} className={cn('flex', message.sender === 'player' ? 'justify-end' : 'justify-start')}>
                     <div
