@@ -15,7 +15,7 @@ import scala.collection.concurrent.TrieMap
 import scala.util.Random
 
 object GameSimulationService:
-
+  /*
   enum SessionStatus(val apiValue: String):
     case Waiting extends SessionStatus("waiting_for_start")
     case InProgress extends SessionStatus("in_progress")
@@ -540,5 +540,5 @@ endobj
 trailer << /Root 1 0 R >>
 %%EOF"""
     pdf.getBytes(StandardCharsets.UTF_8)
-
+  */
 end GameSimulationService

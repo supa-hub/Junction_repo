@@ -13,7 +13,6 @@ given Conversion[StudentStatsMongo, StudentStats] with
     overTrusting = x.overTrusting,
     laziness = x.laziness,
     impulsiveness = x.impulsiveness,
-    scenariosDone = x.scenariosDone,
     longTermEffects = x.longTermEffects
   )
 
@@ -25,9 +24,24 @@ given Conversion[StudentHabitsMongo, StudentHabits] with
     riskTaking = x.riskTaking
   )
 
+given Conversion[ScenarioStateMongo, ScenarioState] with
+  override def apply(x: ScenarioStateMongo): ScenarioState = ScenarioState(
+    template = x.template,
+    turnsTaken = x.turnsTaken
+  )
+
+given Conversion[ScenarioTemplateMongo, ScenarioTemplate] with
+  override def apply(x: ScenarioTemplateMongo): ScenarioTemplate = ScenarioTemplate(
+    key = x.key,
+    title = x.title,
+    narrative = x.narrative
+  )
+
 given Conversion[StudentUserMongo, StudentUser] with
   override def apply(x: StudentUserMongo): StudentUser = StudentUser(
     userName = x.userName,
+    currentScenario = x.currentScenario.map(identity),
+    completedScenarios = x.completedScenarios.map(_.toString),
     stats = x.stats,
     habits = x.habits
   )
@@ -36,7 +50,12 @@ given Conversion[SessionMongo, Session] with
   override def apply(x: SessionMongo): Session = Session(
     sessionName = x.sessionName,
     sessionJoinCode = x.sessionJoinCode,
-    students = x.students.map(identity)
+    location = x.location,
+    monthlyIncome = x.monthlyIncome,
+    students = x.students.map(identity),
+    status = x.status,
+    startedAt = x.startedAt,
+    historyRuns = x.historyRuns
   )
 
 given Conversion[ProfessorUserMongo, ProfessorUser] with

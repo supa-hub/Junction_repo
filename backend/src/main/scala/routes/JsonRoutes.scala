@@ -4,11 +4,25 @@ import cats.Monad
 import cats.data.{EitherT, Kleisli, OptionT}
 import cats.effect.*
 import cats.syntax.all.*
-import controllers.{createNewProfessor, createNewSession, loginProfessor}
+import controllers.{
+  createNewProfessor,
+  createNewSession,
+  getLeaderBoard,
+  getStudentStats,
+  getTeacherSessionsSummary,
+  loginProfessor,
+  getProgress,
+  getAnalytics,
+  getStudentInsights,
+  startSession,
+  nextScenario,
+  addStudent
+}
 import models.json.{CreateTeacherSessionPayload, ErrorResponse, JoinSessionPayload, LoginPayload, ProfessorUser, PromptMessagePayload, SessionPayload, SuccessfulResponse}
 import models.json.circecoders.given
+import models.json.http4sentities.given
+import models.json.http4sencoders.given
 import org.http4s.*
-import org.http4s.circe.CirceEntityCodec.*
 import org.http4s.dsl.io.*
 import org.http4s.headers.Cookie
 import org.http4s.server.AuthMiddleware
@@ -70,14 +84,15 @@ object JsonRoutes:
       .value
   )
 
-  val onFailure: AuthedRoutes[String, IO] = Kleisli(req => OptionT.liftF(Forbidden(req.context)))
-  val authMiddleware: AuthMiddleware[IO, ProfessorUser] = AuthMiddleware(authUser, onFailure)
+  private val onFailure: AuthedRoutes[String, IO] = Kleisli(req => OptionT.liftF(Forbidden(req.context)))
+  private val authMiddleware: AuthMiddleware[IO, ProfessorUser] = AuthMiddleware(authUser, onFailure)
 
+  /*
   private def handleServiceEither[T](result: Either[GameSimulationService.ServiceError, T], successStatus: Status = Status.Ok)(using EntityEncoder[IO, T]): IO[Response[IO]] =
     result match
       case Right(value) => Response[IO](status = successStatus).withEntity(value).pure[IO]
       case Left(err) => Response[IO](status = err.status).withEntity(ErrorResponse(err.message)).pure[IO]
-
+  */
   val route = HttpRoutes.of[IO] {
     case req @ POST -> Root / "api" / "newSessionData" =>
       req
@@ -107,35 +122,63 @@ object JsonRoutes:
         .toResponse
   }
 
-  val authedRoutes = AuthedRoutes.of[ProfessorUser, IO] {
-    case req @ POST -> Root / "api" / "teachers" / teacherId / "sessions" as user =>
+  private val authed = AuthedRoutes.of[ProfessorUser, IO] {
+    case req @ POST -> Root / "api" / "teachers" / "newSession" as user =>
       req.req
-        .attemptAs[CreateTeacherSessionPayload]
-        .foldF(
-          err => BadRequest(ErrorResponse(s"Received data could not be decoded: ${err.getMessage}")),
-          payload => GameSimulationService.createSession(teacherId, payload.sessionName, payload.location, payload.monthlyIncome).flatMap(res => Created(res))
+        .attemptAs[SessionPayload]
+        .biflatMap[ErrorResponse, SuccessfulResponse](
+          err => EitherT.leftT(ErrorResponse(s"Received data could not be decoded: ${err.getMessage}")),
+          payload => EitherT(createNewSession(payload))
+        )
+        .toResponse
+
+
+    case POST -> Root / "api" / "teachers" / "sessions" / sessionId / "start" as user =>
+      startSession(user.email, sessionId)
+        .flatMap(
+          _.fold(
+            err => BadRequest(err),
+            data => Ok(data)
+          )
         )
 
-    case POST -> Root / "api" / "teachers" / teacherId / "sessions" / sessionId / "start" as user =>
-      GameSimulationService.startSession(teacherId, sessionId).flatMap(result => handleServiceEither(result, Status.Accepted))
-
-    case GET -> Root / "api" / "teachers" / teacherId / "sessions" as user =>
-      GameSimulationService.listTeacherSessions(teacherId).flatMap(res => Ok(res))
+    case GET -> Root / "api" / "teachers" / "sessions" as user =>
+      val stream = getTeacherSessionsSummary(user.email)
+      Ok(stream)
 
     case req @ POST -> Root / "api" / "sessions" / joinCode / "students" as user =>
       req.req
         .attemptAs[JoinSessionPayload]
         .foldF(
           err => BadRequest(ErrorResponse(s"Received data could not be decoded: ${err.getMessage}")),
-          payload => GameSimulationService.joinSession(joinCode, payload.userName).flatMap(result => handleServiceEither(result, Status.Created))
+          payload => addStudent(joinCode, payload.userName)
+            .flatMap(
+              _.fold(
+                err => BadRequest(err),
+                data => Ok(data)
+              )
+            )
         )
 
     case GET -> Root / "api" / "sessions" / sessionId / "students" / studentId as user =>
-      GameSimulationService.studentDashboard(sessionId, studentId).flatMap(result => handleServiceEither(result))
+      getStudentStats(user.email, sessionId, studentId)
+        .flatMap(
+          _.fold(
+            err => BadRequest(err),
+            data => Ok(data)
+          )
+        )
 
     case GET -> Root / "api" / "sessions" / sessionId / "next-scenario" :? StudentIdParam(studentId) as user =>
-      GameSimulationService.nextScenario(sessionId, studentId).flatMap(result => handleServiceEither(result))
+      nextScenario(user.email, sessionId, studentId)
+        .flatMap(
+          _.fold(
+            err => BadRequest(err),
+            data => Ok(data)
+          )
+        )
 
+      /*
     case req @ POST -> Root / "api" / "sessions" / sessionId / "prompts" / promptId as user =>
       req.req
         .attemptAs[PromptMessagePayload]
@@ -145,19 +188,44 @@ object JsonRoutes:
             val msg = GameSimulationService.PromptMessage(payload.studentId, payload.message, payload.scenarioId)
             GameSimulationService.submitPrompt(sessionId, promptId, msg).flatMap(result => handleServiceEither(result))
         )
-
+    */
     case GET -> Root / "api" / "sessions" / sessionId / "leaderboard" as user =>
-      GameSimulationService.leaderboard(sessionId).flatMap(result => handleServiceEither(result))
+      getLeaderBoard(user.email, sessionId)
+        .flatMap(
+          _.fold(
+            err => BadRequest(err),
+            data => Ok(data)
+          )
+        )
 
     case GET -> Root / "api" / "sessions" / sessionId / "progress" as user =>
-      GameSimulationService.progress(sessionId).flatMap(result => handleServiceEither(result))
+      getProgress(user.email, sessionId)
+        .flatMap(
+          _.fold(
+            err => BadRequest(err),
+            data => Ok(data)
+          )
+        )
 
     case GET -> Root / "api" / "sessions" / sessionId / "analytics" / "summary" as user =>
-      GameSimulationService.analytics(sessionId).flatMap(result => handleServiceEither(result))
+      getAnalytics(user.email, sessionId)
+        .flatMap(
+          _.fold(
+            err => BadRequest(err),
+            data => Ok(data)
+          )
+        )
 
     case GET -> Root / "api" / "sessions" / sessionId / "students" / studentId / "insights" as user =>
-      GameSimulationService.studentInsights(sessionId, studentId).flatMap(result => handleServiceEither(result))
+      getStudentInsights(user.email, sessionId, studentId)
+        .flatMap(
+          _.fold(
+            err => BadRequest(err),
+            data => Ok(data)
+          )
+        )
 
+      /*
     case GET -> Root / "api" / "sessions" / sessionId / "reports" / "classroom.pdf" as user =>
       GameSimulationService.classroomReport(sessionId).flatMap {
         case Right(bytes) =>
@@ -169,8 +237,14 @@ object JsonRoutes:
           )
         case Left(err) => Response[IO](status = err.status).withEntity(ErrorResponse(err.message)).pure[IO]
       }
-
+       */
+    
+    /*
     case GET -> Root / "api" / "teachers" / teacherId / "sessions" / sessionId / "history" as user =>
       GameSimulationService.sessionHistory(teacherId, sessionId).flatMap(result => handleServiceEither(result))
+      
+     */
   }
+
+  val authedRoutes = authMiddleware(authed)
 end JsonRoutes

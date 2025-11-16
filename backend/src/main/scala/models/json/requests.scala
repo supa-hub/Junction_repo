@@ -1,11 +1,39 @@
 package models.json
 
+import models.{HistoryRun, SessionStatus}
 import upickle.default.ReadWriter
+
+
+final case class SessionSummary(
+  sessionName: String,
+  joinCode: String,
+  status: String,
+  startedAt: Option[String],
+  playerCount: Int,
+  location: String,
+  monthlyIncome: models.Number
+)
 
 final case class Session(
   sessionName: String,
   sessionJoinCode: String,
-  students: List[StudentUser]
+  location: String,
+  monthlyIncome: models.Number,
+  students: List[StudentUser],
+  status: SessionStatus,
+  startedAt: Option[String],
+  historyRuns: List[HistoryRun]
+) derives ReadWriter
+
+final case class ScenarioTemplate(
+  key: String,
+  title: String,
+  narrative: String
+) derives ReadWriter
+
+final case class ScenarioState(
+  template: ScenarioTemplate,
+  turnsTaken: Int
 ) derives ReadWriter
 
 final case class SessionPayload(
@@ -44,7 +72,6 @@ final case class StudentStats(
   overTrusting: models.Number,
   laziness: models.Number,
   impulsiveness: models.Number,
-  scenariosDone: List[String],
   longTermEffects: List[String]
 ) derives ReadWriter
 
@@ -57,6 +84,8 @@ final case class StudentHabits(
 
 final case class StudentUser(
   userName: String,
+  currentScenario: Option[ScenarioState],
+  completedScenarios: List[String],
   stats: StudentStats,
   habits: StudentHabits
 ) derives ReadWriter
@@ -74,6 +103,14 @@ final case class ProfessorUser(
 package circecoders:
   import io.circe.*
   import io.circe.generic.semiauto.*
+  import models.statuscodecs.given
+  import models.historycodecs.given
+  given scenarioTemplateEncoder: Encoder[ScenarioTemplate] = deriveEncoder
+  given scenarioTemplateDecoder: Decoder[ScenarioTemplate] = deriveDecoder
+  given scenarioEncoder: Encoder[ScenarioState] = deriveEncoder
+  given scenarioDecoder: Decoder[ScenarioState] = deriveDecoder
+  given scenarioOptionEncoder: Encoder[Option[ScenarioState]] = deriveEncoder
+  given scenarioOptionDecoder: Decoder[Option[ScenarioState]] = deriveDecoder
   given sessionEncoder: Encoder[Session] = deriveEncoder[Session]
   given sessionDecoder: Decoder[Session] = deriveDecoder[Session]
   given sessionPayloadEncoder: Encoder[SessionPayload] = deriveEncoder[SessionPayload]
@@ -94,6 +131,8 @@ package circecoders:
   given studentUserDecoder: Decoder[StudentUser] = deriveDecoder[StudentUser]
   given professorUserEncoder: Encoder[ProfessorUser] = deriveEncoder[ProfessorUser]
   given professorUserDecoder: Decoder[ProfessorUser] = deriveDecoder[ProfessorUser]
+  given sessionSummaryEncoder: Encoder[SessionSummary] = deriveEncoder
+  given sessionSummaryDecoder: Decoder[SessionSummary] = deriveDecoder
 end circecoders
 
 package http4sentities:
@@ -101,6 +140,9 @@ package http4sentities:
   import models.json.circecoders.given
   import org.http4s.EntityDecoder
   import org.http4s.circe.jsonOf
+  import models.statuscodecs.given
+  import models.historycodecs.given
+  given sessionStatusEntity: EntityDecoder[IO, SessionStatus] = jsonOf[IO, SessionStatus]
   given sessionPayloadEntity: EntityDecoder[IO, SessionPayload] = jsonOf[IO, SessionPayload]
   given createSessionEntity: EntityDecoder[IO, CreateTeacherSessionPayload] = jsonOf[IO, CreateTeacherSessionPayload]
   given loginPayloadEntity: EntityDecoder[IO, LoginPayload] = jsonOf[IO, LoginPayload]
@@ -112,3 +154,14 @@ package http4sentities:
   given professorUserEntity: EntityDecoder[IO, ProfessorUser] = jsonOf[IO, ProfessorUser]
 end http4sentities
 
+
+package http4sencoders:
+  import cats.effect.IO
+  import models.json.circecoders.given
+  import org.http4s.EntityEncoder
+  import org.http4s.circe.jsonEncoderOf
+  given sessionSummaryEncoder: EntityEncoder[IO, SessionSummary] = jsonEncoderOf
+  given statsEncoder: EntityEncoder[IO, StudentStats] = jsonEncoderOf
+  given habitsEncoder: EntityEncoder[IO, StudentHabits] = jsonEncoderOf
+  given userEncoder: EntityEncoder[IO, StudentUser] = jsonEncoderOf
+end http4sencoders

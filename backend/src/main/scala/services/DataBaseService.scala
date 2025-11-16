@@ -177,7 +177,7 @@ object DataBaseService:
    * @return
    */
   def addData[A](userName: String, aSessionCode: String)(using Conversion[A, SessionMongo]): IO[Either[Throwable, UpdateResult]] =
-    val filter = sessionFilter(aSessionCode)
+    val filter = userSessionFilter(aSessionCode)
     val data = StudentUserMongo(userName = userName)
     val update = Update.addToSet(s"${sessionField}.students", data.toBson) // need to call .toBson so that update is successful
     professorSessionCollection
@@ -192,7 +192,6 @@ object DataBaseService:
       .flatMap(_.updateOne(filter, update))
       .attempt
 
-
   /**
    * Creates a new session
    * @param email
@@ -203,8 +202,6 @@ object DataBaseService:
    * @return
    */
   def addSession[A](email: String, aSessionName: String, location: String)(using Conversion[A, SessionMongo]): IO[Either[Throwable, Option[String]]] =
-    val filter = userFilter(email)
-
     // find a session join code that isn't used yet
     val sessionCode = fs2.Stream.repeatEval(
       professorSessionCollection
@@ -227,6 +224,24 @@ object DataBaseService:
         val data = SessionMongo.generate(aSessionName, code, location)
         collection.insertOne(ProfessorSessionMongo.generate(email, data))
       )
+      .map(res => Option(res.getInsertedId))
+      .map {
+        case Some(value) => Some(value.asObjectId.getValue.toHexString)
+        case None => None
+      }
+      .attempt
+
+  def updateSession[A](email: String, aSession: A)(using Conversion[A, SessionMongo]): IO[Either[Throwable, Option[String]]] =
+    val session: SessionMongo = aSession
+    val filter = userFilter(email) && userSessionFilter(session.sessionJoinCode)
+    val professorSession = ProfessorSessionMongo.generate(email, session)
+
+    professorSessionCollection
+      .flatMap(_.deleteOne(filter))
+      .attempt
+
+    professorSessionCollection
+      .flatMap(_.insertOne(professorSession))
       .map(res => Option(res.getInsertedId))
       .map {
         case Some(value) => Some(value.asObjectId.getValue.toHexString)
@@ -278,5 +293,47 @@ object DataBaseService:
       )
       .flatten
       .map(identity)
+
+  def getSessionDataAsStream[A](email: String, sessionId: Option[String] = None)(using Conversion[SessionMongo, A]): fs2.Stream[IO, A] =
+    val userFil = userFilter(email)
+    val filter = sessionId match
+      case Some(value) => userFil && userSessionFilter(value)
+      case None => userFil
+
+    fs2.Stream.eval(
+        professorSessionCollection
+          .map(_.find(filter))
+          .map(_.stream)
+      )
+      .flatten
+      .map(_.session)
+      .map(identity)
+
+  def getStudent[A](email: String, sessionId: String, studentName: String)(using c: Conversion[StudentUserMongo, A]): IO[Either[Throwable, A]] =
+    val filter = userFilter(email) && userSessionFilter(sessionId)
+
+    professorSessionCollection
+      .map(_.find(filter))
+      .flatMap(_.first)
+      .map(_.toRight(Throwable("Couldn't find session")))
+      .map(_.map(_.session.students.find(_.userName == studentName)))
+      .map(_.flatMap(_.toRight(Throwable("Couldn't find student"))))
+      .map(_.map(c.apply))
+      .attempt
+      .map(_.flatten)
+
+
+  def getSession[A](email: String, sessionId: String)(using c: Conversion[SessionMongo, A]): IO[Either[Throwable, A]] =
+    val filter = userFilter(email) && userSessionFilter(sessionId)
+
+    professorSessionCollection
+      .map(_.find(filter))
+      .flatMap(_.first)
+      .map(_.toRight(Throwable("Couldn't find session")))
+      .map(_.map(_.session))
+      .map(_.map(c.apply))
+      .attempt
+      .map(_.flatten)
+
 
 end DataBaseService
