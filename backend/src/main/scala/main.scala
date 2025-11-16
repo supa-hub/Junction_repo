@@ -43,7 +43,7 @@ object Main extends IOApp:
       .withAllowOriginHeader(origin => origin.value == allowedOriginValue)
       .withAllowCredentials(true)
       .withAllowHeadersIn(allowedHeaders)
-      .withAllowMethodsIn(allowedMethods)
+      .withAllowMethodsAll
       .withMaxAge(1.day)
 
     val httpApp = Router("/" -> services).orNotFound
