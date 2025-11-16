@@ -115,6 +115,20 @@ object JsonRoutes:
           payload => EitherT(loginProfessor(payload))
         )
         .toResponse
+
+    case req @ POST -> Root / "api" / "sessions" / joinCode / "students" =>
+      req
+        .attemptAs[JoinSessionPayload]
+        .foldF(
+          err => BadRequest(ErrorResponse(s"Received data could not be decoded: ${err.getMessage}")),
+          payload => addStudent(joinCode, payload.userName)
+            .flatMap(
+              _.fold(
+                err => BadRequest(err),
+                data => Ok(data)
+              )
+            )
+        )
   }
 
   private val authed = AuthedRoutes.of[ProfessorUser, IO] {
@@ -140,20 +154,6 @@ object JsonRoutes:
     case GET -> Root / "api" / "teachers" / "sessions" as user =>
       val stream = getTeacherSessionsSummary(user.email)
       Ok(stream)
-
-    case req @ POST -> Root / "api" / "sessions" / joinCode / "students" as user =>
-      req.req
-        .attemptAs[JoinSessionPayload]
-        .foldF(
-          err => BadRequest(ErrorResponse(s"Received data could not be decoded: ${err.getMessage}")),
-          payload => addStudent(joinCode, payload.userName)
-            .flatMap(
-              _.fold(
-                err => BadRequest(err),
-                data => Ok(data)
-              )
-            )
-        )
 
     case GET -> Root / "api" / "sessions" / sessionId / "students" / studentId as user =>
       getStudentStats(user.email, sessionId, studentId)
