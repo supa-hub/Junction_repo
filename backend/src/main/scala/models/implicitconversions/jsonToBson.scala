@@ -43,13 +43,16 @@ given Conversion[ScenarioTemplate, ScenarioTemplateMongo] with
   )
 
 given Conversion[StudentUser, StudentUserMongo] with
-  override def apply(x: StudentUser): StudentUserMongo = StudentUserMongo(
-    _id = ObjectId.gen,
+  override def apply(x: StudentUser): StudentUserMongo =
+    val identifier = ObjectId.from(x.studentId).fold(_ => ObjectId.gen, identity)
+    StudentUserMongo(
+      _id = identifier,
     userName = x.userName,
     currentScenario = x.currentScenario.map(identity),
     completedScenarios = x.completedScenarios.map(ObjectId.from(_).fold(_ => ObjectId.gen, id => id)),
-    stats = x.stats
-  )
+      stats = x.stats,
+      habits = x.habits
+    )
 
 given Conversion[Session, SessionMongo] with
   override def apply(x: Session): SessionMongo = SessionMongo(

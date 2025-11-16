@@ -101,8 +101,7 @@ export interface PromptReply {
 
 export interface LeaderboardEntry {
   rank: number
-  studentId: string
-  nickname: string
+  name: string
   wealth: number
   health: number
   happiness: number
@@ -112,6 +111,19 @@ export interface LeaderboardEntry {
 export interface LeaderboardResponse {
   updatedAt: string
   entries: LeaderboardEntry[]
+}
+
+export interface StudentRosterEntry {
+  studentName: string
+  wealth: number
+  health: number
+  happiness: number
+  currentScenarioTitle?: string | null
+  completedScenarioCount: number
+}
+
+export interface SessionRosterResponse {
+  students: StudentRosterEntry[]
 }
 
 export interface ClassroomSummary {
@@ -374,6 +386,10 @@ export const api = {
 
   fetchStudentInsights(sessionId: string, studentId: string) {
     return request<StudentInsights>(`/api/sessions/${sessionId}/students/${studentId}/insights`)
+  },
+
+  fetchTeacherSessionRoster(sessionId: string) {
+    return request<SessionRosterResponse>(`/api/teachers/sessions/${sessionId}/students`)
   },
 }
 

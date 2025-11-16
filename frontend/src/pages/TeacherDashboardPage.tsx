@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -11,7 +11,7 @@ import {
   RefreshCw,
 } from 'lucide-react'
 
-import { ApiError, api, setAuthToken, type AnalyticsSummary, type SessionSummary } from '../api'
+import { ApiError, api, setAuthToken, type SessionSummary, type StudentRosterEntry } from '../api'
 import { clearTeacherAuth, loadTeacherAuth } from '../teacherAuth'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
@@ -24,10 +24,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '../components/ui/dialog'
-import { ClassroomSimulationSummary } from '../components/teacher/ClassroomSimulationSummary'
 import { Leaderboard } from '../components/teacher/Leaderboard'
 
-type DashboardView = 'list' | 'classroom' | 'leaderboard' | 'summary'
+type DashboardView = 'list' | 'classroom' | 'leaderboard'
 
 function formatStatusLabel(status: string) {
   switch (status) {
@@ -68,28 +67,17 @@ export function TeacherDashboardPage() {
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [newClassroom, setNewClassroom] = useState({ name: '', location: '', monthlyIncome: 3500 })
   const [loadingSessions, setLoadingSessions] = useState(false)
-  const [loadingAnalytics, setLoadingAnalytics] = useState(false)
+  const [loadingRoster, setLoadingRoster] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [analytics, setAnalytics] = useState<Record<string, AnalyticsSummary>>({})
+  const [roster, setRoster] = useState<StudentRosterEntry[]>([])
 
   const selectedSession = useMemo(
     () => sessions.find((session) => session.sessionId === selectedSessionId) ?? null,
     [selectedSessionId, sessions],
   )
 
-  const selectedAnalytics = selectedSession ? analytics[selectedSession.sessionId] : null
 
-  useEffect(() => {
-    if (!auth) {
-      navigate('/teacher', { replace: true })
-      return
-    }
-    setAuthToken(auth.token)
-    refreshSessions()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [auth?.token])
-
-  const refreshSessions = async () => {
+  const refreshSessions = useCallback(async () => {
     if (!auth) return
     setLoadingSessions(true)
     setError(null)
@@ -107,26 +95,16 @@ export function TeacherDashboardPage() {
     } finally {
       setLoadingSessions(false)
     }
-  }
+  }, [auth])
 
-  const ensureAnalytics = async (sessionId: string) => {
-    if (analytics[sessionId]) return
-    setLoadingAnalytics(true)
-    try {
-      const summary = await api.fetchAnalyticsSummary(sessionId)
-      setAnalytics((previous) => ({ ...previous, [sessionId]: summary }))
-    } catch (analyticsError) {
-      if (analyticsError instanceof ApiError) {
-        setError(analyticsError.message)
-      } else if (analyticsError instanceof Error) {
-        setError(analyticsError.message)
-      } else {
-        setError('Unable to load analytics for this session.')
-      }
-    } finally {
-      setLoadingAnalytics(false)
+  useEffect(() => {
+    if (!auth) {
+      navigate('/teacher', { replace: true })
+      return
     }
-  }
+    setAuthToken(auth.token)
+    refreshSessions()
+  }, [auth, navigate, refreshSessions])
 
   const handleCreateClassroom = async () => {
     if (!auth) return
@@ -154,7 +132,6 @@ export function TeacherDashboardPage() {
   const handleSelectSession = async (sessionId: string) => {
     setSelectedSessionId(sessionId)
     setView('classroom')
-    await ensureAnalytics(sessionId)
   }
 
   const handleStartSession = async () => {
@@ -179,13 +156,70 @@ export function TeacherDashboardPage() {
     }
   }
 
+  useEffect(() => {
+    if (view !== 'classroom' || !selectedSessionId) {
+      setRoster([])
+      setLoadingRoster(false)
+      return
+    }
+
+    let cancelled = false
+
+    const loadRoster = async () => {
+      try {
+        const response = await api.fetchTeacherSessionRoster(selectedSessionId)
+        if (cancelled) return
+        setRoster(response.students)
+        setSessions((previous) =>
+          previous.map((session) =>
+            session.sessionId === selectedSessionId
+              ? { ...session, playerCount: response.students.length }
+              : session,
+          ),
+        )
+      } catch (rosterError) {
+        if (!cancelled) {
+          console.error('Failed to fetch roster', rosterError)
+        }
+      }
+    }
+
+    setRoster([])
+    setLoadingRoster(true)
+
+    loadRoster()
+      .catch((rosterError) => {
+        if (!cancelled) {
+          console.error('Failed to fetch roster', rosterError)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoadingRoster(false)
+        }
+      })
+
+    const pollId = window.setInterval(() => {
+      loadRoster().catch((rosterError) => {
+        if (!cancelled) {
+          console.error('Failed to fetch roster', rosterError)
+        }
+      })
+    }, 5000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(pollId)
+    }
+  }, [view, selectedSessionId])
+
   const handleLogout = () => {
     clearTeacherAuth()
     setAuthToken(null)
     setAuth(null)
     setSessions([])
     setSelectedSessionId(null)
-    setAnalytics({})
+    setRoster([])
     setView('list')
     navigate('/teacher')
   }
@@ -204,24 +238,13 @@ export function TeacherDashboardPage() {
     )
   }
 
-  if (view === 'summary' && selectedSession && selectedAnalytics) {
-    return (
-      <ClassroomSimulationSummary
-        classroomName={selectedSession.sessionName}
-        sessionId={selectedSession.sessionId}
-        analytics={selectedAnalytics}
-        onBack={() => setView('classroom')}
-      />
-    )
-  }
-
   return (
     <div className="min-h-screen bg-slate-900 p-6">
       <div className="mx-auto flex max-w-[1400px] flex-col gap-6">
         <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-3xl text-white">Teacher Dashboard</h1>
-            <p className="text-slate-400">Launch sessions, monitor progress, and turn habits into insights.</p>
+            <p className="text-slate-400">Launch sessions and monitor progress for your classrooms.</p>
           </div>
           <div className="flex flex-wrap gap-3">
             <Button variant="outline" className="border-slate-600 text-white" onClick={refreshSessions} disabled={loadingSessions}>
@@ -284,16 +307,15 @@ export function TeacherDashboardPage() {
         {view === 'classroom' && selectedSession ? (
           <ClassroomDetail
             session={selectedSession}
-            analytics={selectedAnalytics}
-            loadingAnalytics={loadingAnalytics}
+            roster={roster}
+            loadingRoster={loadingRoster}
             onBack={() => {
               setSelectedSessionId(null)
+              setRoster([])
               setView('list')
             }}
             onStartSession={handleStartSession}
             onViewLeaderboard={() => setView('leaderboard')}
-            onViewSummary={() => selectedAnalytics ? setView('summary') : ensureAnalytics(selectedSession.sessionId)}
-            onRefreshAnalytics={() => ensureAnalytics(selectedSession.sessionId)}
           />
         ) : (
           <SessionGrid
@@ -378,23 +400,20 @@ function SessionGrid({
 
 function ClassroomDetail({
   session,
-  analytics,
-  loadingAnalytics,
+  roster,
+  loadingRoster,
   onBack,
   onStartSession,
   onViewLeaderboard,
-  onViewSummary,
-  onRefreshAnalytics,
 }: {
   session: SessionSummary
-  analytics: AnalyticsSummary | null
-  loadingAnalytics: boolean
+  roster: StudentRosterEntry[]
+  loadingRoster: boolean
   onBack: () => void
   onStartSession: () => void
   onViewLeaderboard: () => void
-  onViewSummary: () => void
-  onRefreshAnalytics: () => void
 }) {
+  const activeCount = roster.length
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -404,7 +423,7 @@ function ClassroomDetail({
           </Button>
           <div>
             <h2 className="text-2xl text-white">{session.sessionName}</h2>
-            <p className="text-sm text-slate-400">{session.location || 'Location TBD'} • {session.playerCount} students</p>
+            <p className="text-sm text-slate-400">{session.location || 'Location TBD'} • {activeCount} students</p>
           </div>
         </div>
         <div className={`rounded-full border px-4 py-1 text-sm ${statusColors(session.status)}`}>
@@ -439,71 +458,57 @@ function ClassroomDetail({
           <Button variant="outline" className="border-slate-700 text-white" onClick={onViewLeaderboard}>
             <BarChart3 className="mr-2 h-4 w-4" /> View leaderboard
           </Button>
-          <Button
-            variant="outline"
-            className="border-slate-700 text-white"
-            onClick={onViewSummary}
-            disabled={!analytics}
-          >
-            Insights summary
-          </Button>
-          <Button
-            variant="ghost"
-            className="text-slate-300"
-            onClick={onRefreshAnalytics}
-            disabled={loadingAnalytics}
-          >
-            {loadingAnalytics ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}Refresh analytics
-          </Button>
         </div>
       </div>
 
-      <HabitsPanel analytics={analytics} />
-    </div>
-  )
-}
-
-function HabitsPanel({ analytics }: { analytics: AnalyticsSummary | null }) {
-  if (!analytics) {
-    return (
-      <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-900 p-6 text-center text-slate-400">
-        Load analytics to see habit trends for this classroom.
-      </div>
-    )
-  }
-
-  const habitEntries = Object.entries(analytics.habitAverages)
-
-  return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h3 className="text-xl text-white">Habit trends</h3>
-          <p className="text-sm text-slate-400">Hidden behaviors shaping the long-term impact of decisions.</p>
-        </div>
-        <div className="text-sm text-slate-400">
-          Engagement {Math.round(analytics.classroomSummary.engagementRate * 100)}% • Avg core scenarios {analytics.classroomSummary.avgScenariosCompleted.toFixed(1)}
-        </div>
-      </div>
-      <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {habitEntries.map(([habit, value]) => (
-          <div key={habit} className="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
-            <p className="text-xs uppercase tracking-wide text-slate-500">{habit}</p>
-            <p className="text-2xl text-white">{value.mean.toFixed(1)}</p>
-            <p className="text-sm text-slate-400">Trend: {value.trend}</p>
+      <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h3 className="text-xl text-white">Students</h3>
+            <p className="text-sm text-slate-400">
+              {activeCount === 0 ? 'No students have joined yet.' : `${activeCount} student${activeCount === 1 ? '' : 's'} connected`}
+            </p>
           </div>
-        ))}
-      </div>
-      <div className="mt-6">
-        <h4 className="text-sm uppercase tracking-wide text-slate-500">AI recommendations</h4>
-        <ul className="mt-2 space-y-2 text-sm text-slate-300">
-          {analytics.recommendations.map((recommendation) => (
-            <li key={recommendation.curriculumRef} className="rounded-lg border border-slate-800 bg-slate-950/60 p-4">
-              <p className="text-slate-200">{recommendation.summary}</p>
-              <p className="text-xs text-slate-500">{recommendation.rationale}</p>
-            </li>
-          ))}
-        </ul>
+          {loadingRoster && <Loader2 className="h-5 w-5 animate-spin text-slate-400" />}
+        </div>
+        <div className="mt-4 space-y-3">
+          {activeCount === 0 && !loadingRoster ? (
+            <div className="rounded-xl border border-dashed border-slate-700 bg-slate-900 p-6 text-center text-slate-400">
+              Share the join code to see students appear here in real time.
+            </div>
+          ) : (
+            roster.map((student) => (
+              <div
+                key={student.studentName}
+                className="rounded-xl border border-slate-800 bg-slate-950/60 p-4"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-lg text-white">{student.studentName}</p>
+                    <p className="text-xs text-slate-400">
+                      Completed {student.completedScenarioCount} scenario{student.completedScenarioCount === 1 ? '' : 's'}
+                      {student.currentScenarioTitle ? ` • Working on "${student.currentScenarioTitle}"` : ''}
+                    </p>
+                  </div>
+                  <div className="flex gap-3 text-xs uppercase tracking-wide text-slate-400">
+                    <div>
+                      <span className="block text-[11px] text-slate-500">Wealth</span>
+                      <span className="text-white">€{Math.round(student.wealth).toLocaleString()}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[11px] text-slate-500">Health</span>
+                      <span className="text-white">{Math.round(student.health)}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[11px] text-slate-500">Happiness</span>
+                      <span className="text-white">{Math.round(student.happiness)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       </div>
     </div>
   )

@@ -63,9 +63,9 @@ final case class StudentUserMongo(
   completedScenarios: List[ObjectId] = List(),
   stats: StudentStatsMongo = StudentStatsMongo(
     _id = ObjectId.gen,
-    wealth = 0,
-    health = 0,
-    happiness = 0,
+    wealth = 1000,
+    health = 60,
+    happiness = 60,
     riskTaking = 0,
     overTrusting = 0,
     laziness = 0,

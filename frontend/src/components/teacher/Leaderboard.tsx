@@ -70,7 +70,7 @@ export function Leaderboard({ sessionId, sessionName, onBack }: LeaderboardProps
           <div className="space-y-4">
             {entries.length === 0 && <p className="text-center text-slate-400">No students have played yet.</p>}
             {entries.map((entry) => (
-              <LeaderboardRow key={entry.studentId} entry={entry} />
+              <LeaderboardRow key={`${entry.rank}-${entry.name}`} entry={entry} />
             ))}
           </div>
         )}
@@ -93,7 +93,7 @@ function LeaderboardRow({ entry }: { entry: LeaderboardEntry }) {
           #{entry.rank}
         </div>
         <div className="flex-1">
-          <p className="text-lg text-white">{entry.nickname}</p>
+          <p className="text-lg text-white">{entry.name}</p>
           <p className="text-xs text-slate-400">{entry.scenariosDone} scenarios completed</p>
         </div>
         <div className="flex flex-wrap gap-3">

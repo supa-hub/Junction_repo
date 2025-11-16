@@ -237,20 +237,22 @@ object DataBaseService:
   def updateSession[A](email: String, aSession: A)(using Conversion[A, SessionMongo]): IO[Either[Throwable, Option[String]]] =
     val session: SessionMongo = aSession
     val filter = userFilter(email) && userSessionFilter(session.sessionJoinCode)
-    val professorSession = ProfessorSessionMongo.generate(email, session)
 
-    professorSessionCollection
-      .flatMap(_.deleteOne(filter))
-      .attempt
+    val action = for
+      coll <- professorSessionCollection
+      maybeExisting <- coll.find(filter).first
+      result <- maybeExisting match
+        case Some(existing) =>
+          val replacement = existing.copy(session = session)
+          coll.replaceOne(filter, replacement).map(_ => Some(existing._id.toHexString))
+        case None =>
+          coll
+            .insertOne(ProfessorSessionMongo.generate(email, session))
+            .map(_.getInsertedId)
+            .map(id => Option(id).map(_.asObjectId.getValue.toHexString))
+    yield result
 
-    professorSessionCollection
-      .flatMap(_.insertOne(professorSession))
-      .map(res => Option(res.getInsertedId))
-      .map {
-        case Some(value) => Some(value.asObjectId.getValue.toHexString)
-        case None => None
-      }
-      .attempt
+    action.attempt
 
 
   /**

@@ -39,6 +39,7 @@ given Conversion[ScenarioTemplateMongo, ScenarioTemplate] with
 
 given Conversion[StudentUserMongo, StudentUser] with
   override def apply(x: StudentUserMongo): StudentUser = StudentUser(
+    studentId = x._id.toHexString,
     userName = x.userName,
     currentScenario = x.currentScenario.map(identity),
     completedScenarios = x.completedScenarios.map(_.toString),

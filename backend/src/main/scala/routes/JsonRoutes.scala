@@ -16,7 +16,8 @@ import controllers.{
   getStudentInsights,
   startSession,
   nextScenario,
-  addStudent
+  addStudent,
+  getSessionRoster
 }
 import models.json.{CreateTeacherSessionPayload, ErrorResponse, JoinSessionPayload, JoinSessionResponse, LoginPayload, ProfessorUser, PromptMessagePayload, SessionPayload, SuccessfulResponse}
 import models.json.circecoders.given
@@ -28,7 +29,7 @@ import org.http4s.headers.Authorization
 import org.http4s.AuthScheme
 import org.http4s.Credentials.Token
 import org.http4s.server.AuthMiddleware
-import services.{DataBaseService, GameSimulationService, JWTService}
+import services.{DataBaseService, JWTService}
 import models.implicitconversions.given
 
 /*
@@ -139,6 +140,14 @@ object JsonRoutes:
           case Left(err) => BadRequest(err)
           case Right(data) => Ok(data)
         }
+
+    case GET -> Root / "api" / "sessions" / sessionId / "next-scenario" :? StudentIdParam(studentId) =>
+      nextScenario(sessionId, studentId)
+        .flatMap {
+          case Left(err) if err.err == "Couldn't find session" || err.err == "Couldn't find user" => NotFound(err)
+          case Left(err) => BadRequest(err)
+          case Right(data) => Ok(data)
+        }
   }
 
   private val authed = AuthedRoutes.of[ProfessorUser, IO] {
@@ -167,8 +176,8 @@ object JsonRoutes:
         .toList
         .flatMap(list => Ok(list))
 
-    case GET -> Root / "api" / "sessions" / sessionId / "next-scenario" :? StudentIdParam(studentId) as user =>
-      nextScenario(user.email, sessionId, studentId)
+    case GET -> Root / "api" / "teachers" / "sessions" / sessionId / "students" as user =>
+      getSessionRoster(user.email, sessionId)
         .flatMap(
           _.fold(
             err => BadRequest(err),
@@ -176,17 +185,6 @@ object JsonRoutes:
           )
         )
 
-      /*
-    case req @ POST -> Root / "api" / "sessions" / sessionId / "prompts" / promptId as user =>
-      req.req
-        .attemptAs[PromptMessagePayload]
-        .foldF(
-          err => BadRequest(ErrorResponse(s"Received data could not be decoded: ${err.getMessage}")),
-          payload =>
-            val msg = GameSimulationService.PromptMessage(payload.studentId, payload.message, payload.scenarioId)
-            GameSimulationService.submitPrompt(sessionId, promptId, msg).flatMap(result => handleServiceEither(result))
-        )
-    */
     case GET -> Root / "api" / "sessions" / sessionId / "leaderboard" as user =>
       getLeaderBoard(user.email, sessionId)
         .flatMap(
@@ -222,26 +220,6 @@ object JsonRoutes:
             data => Ok(data)
           )
         )
-
-      /*
-    case GET -> Root / "api" / "sessions" / sessionId / "reports" / "classroom.pdf" as user =>
-      GameSimulationService.classroomReport(sessionId).flatMap {
-        case Right(bytes) =>
-          Ok(bytes).map(
-            _.putHeaders(
-              Header.Raw(CIString("Content-Type"), "application/pdf"),
-              Header.Raw(CIString("Content-Disposition"), "attachment; filename=classroom-report.pdf")
-            )
-          )
-        case Left(err) => Response[IO](status = err.status).withEntity(ErrorResponse(err.message)).pure[IO]
-      }
-       */
-    
-    /*
-    case GET -> Root / "api" / "teachers" / teacherId / "sessions" / sessionId / "history" as user =>
-      GameSimulationService.sessionHistory(teacherId, sessionId).flatMap(result => handleServiceEither(result))
-      
-     */
   }
 
   val authedRoutes = authMiddleware(authed)

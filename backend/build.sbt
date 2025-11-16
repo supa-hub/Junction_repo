@@ -28,6 +28,7 @@ lazy val root = (project in file("."))
     libraryDependencies += "org.http4s" %% "http4s-dsl"          % http4sVersion,
     libraryDependencies += "org.http4s" %% "http4s-circe"        % http4sVersion,
     libraryDependencies += "io.circe" %% "circe-generic" % "0.14.14",
+    libraryDependencies += "io.circe" %% "circe-parser" % "0.14.14",
 
     libraryDependencies += "com.github.jwt-scala" %% "jwt-circe" % "11.0.3",
     libraryDependencies += "com.github.jwt-scala" %% "jwt-play" % "11.0.3",

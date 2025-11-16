@@ -25,6 +25,8 @@ import models.json.{
   SessionPayload,
   SessionStarted,
   SessionSummary,
+  SessionRosterResponse,
+  StudentRosterEntry,
   StatDistribution,
   StatReason,
   StudentInsights,
@@ -35,10 +37,11 @@ import models.json.{
   ScenarioTemplate
 }
 import models.mongo.StudentUserMongo
-import services.{DataBaseService, JWTService}
+import services.{DataBaseService, GeminiScenarioService, JWTService}
 
 import java.time.Instant
 import java.time.format.DateTimeFormatter
+import java.util.UUID
 import mongo4cats.bson.ObjectId
 
 /**
@@ -224,48 +227,122 @@ def getProgress(professorEmail: String, sessionId: String): IO[Either[ErrorRespo
     }
 
 def startSession(professorEmail: String, sessionId: String): IO[Either[ErrorResponse, SessionStarted]] =
+  val action = for
+    session <- EitherT(getSession(professorEmail, sessionId))
+    _ <-
+      if session.status != SessionStatus.Waiting then
+        EitherT.leftT[IO, Unit](ErrorResponse("Can't start session as it's already in progress or completed"))
+      else
+        EitherT.rightT[IO, ErrorResponse](())
+    startedAt = DateTimeFormatter.ISO_INSTANT.format(Instant.now())
+    startedSession = session.copy(status = SessionStatus.InProgress, startedAt = Some(startedAt))
+    _ <- EitherT(
+      DataBaseService
+        .updateSession(professorEmail, startedSession)
+        .map(
+          _.left.map(err => ErrorResponse(s"Couldn't update session: ${err.getMessage}"))
+            .map(_ => ())
+        )
+    )
+    _ <- primeStudentScenarios(startedSession.sessionJoinCode, startedSession.students)
+  yield SessionStarted(startedSession.sessionJoinCode, startedSession.status.apiValue, startedAt)
+
+  action.value
+
+private def primeStudentScenarios(joinCode: String, students: List[StudentUser]): EitherT[IO, ErrorResponse, Unit] =
+  students match
+    case Nil => EitherT.rightT[IO, ErrorResponse](())
+    case head :: tail =>
+      val identifier =
+        Option(head.studentId).filter(_.nonEmpty).getOrElse(head.userName)
+      for
+        _ <- EitherT(nextScenario(joinCode, identifier))
+        _ <- primeStudentScenarios(joinCode, tail)
+      yield ()
+
+
+def nextScenario(sessionJoinCode: String, studentIdentifier: String): IO[Either[ErrorResponse, ScenarioView]] =
+  val result = for
+    sessionDoc <- EitherT(
+      DataBaseService
+        .getSessionByJoinCode(sessionJoinCode)
+        .map(_.left.map(_ => ErrorResponse("Couldn't find session")))
+    )
+    scenarioView <-
+      val session: Session = sessionDoc.session
+      val maybeStudent =
+        session.students
+          .find(_.studentId == studentIdentifier)
+          .orElse(session.students.find(_.userName == studentIdentifier))
+      maybeStudent match
+        case Some(aStudent) =>
+          aStudent.currentScenario match
+            case Some(scenario) =>
+              val existingView = ScenarioView(
+                scenario.template.key,
+                scenario.template.title,
+                scenario.template.narrative
+              )
+              EitherT.rightT[IO, ErrorResponse](existingView)
+            case None =>
+              val promptData = GeminiScenarioService.ScenarioPromptData.from(session, aStudent)
+              val generated = for
+                scenarioText <- EitherT(GeminiScenarioService.generateScenario(promptData))
+                trimmedText = scenarioText.trim
+                scenarioId = UUID.randomUUID().toString
+                template = ScenarioTemplate(scenarioId, scenarioTitleFrom(trimmedText), trimmedText)
+                scenarioState = ScenarioState(template, 0)
+                updatedStudents = session.students.map { student =>
+                  val isSameStudent =
+                    (Option(student.studentId).exists(_.nonEmpty) && student.studentId == aStudent.studentId)
+                      || student.userName == aStudent.userName
+                  if isSameStudent then student.copy(currentScenario = Some(scenarioState)) else student
+                }
+                updatedSession = session.copy(students = updatedStudents)
+                view <- EitherT(
+                  DataBaseService
+                    .updateSession(sessionDoc.email, updatedSession)
+                    .map {
+                      case Right(_) => Right(ScenarioView(scenarioId, template.title, trimmedText))
+                      case Left(e) => Left(ErrorResponse(s"Couldn't update session: ${e.getMessage}"))
+                    }
+                )
+              yield view
+
+              generated
+        case None => EitherT.leftT[IO, ScenarioView](ErrorResponse("Couldn't find user"))
+  yield scenarioView
+
+  result.value
+
+private def scenarioTitleFrom(text: String): String =
+  val trimmed = text.trim
+  if trimmed.isEmpty then "Scenario"
+  else
+    val firstLine = trimmed.linesIterator.nextOption().getOrElse(trimmed)
+    val sentenceEnd = firstLine.indexWhere(ch => ch == '.' || ch == '!' || ch == '?')
+    val candidate =
+      if sentenceEnd >= 0 then firstLine.substring(0, sentenceEnd).trim
+      else if firstLine.length <= 80 then firstLine.trim
+      else firstLine.take(80).trim
+    if candidate.nonEmpty then candidate else "Scenario"
+
+def getSessionRoster(professorEmail: String, sessionId: String): IO[Either[ErrorResponse, SessionRosterResponse]] =
   getSession(professorEmail, sessionId)
-    .flatMap {
-      case Right(res) if res.status != SessionStatus.Waiting => IO.pure(Left(ErrorResponse("Can't start session as its already in progress or has already completed")))
+    .map {
       case Right(res) =>
-        val startedAt = DateTimeFormatter.ISO_INSTANT.format(Instant.now())
-        val startedSession = res.copy(status = SessionStatus.InProgress, startedAt = Some(startedAt))
-
-        DataBaseService.updateSession(professorEmail, startedSession)
-          .map(_.map(_ => SessionStarted(startedSession.sessionJoinCode, startedSession.status.apiValue, startedAt)))
-          .map {
-            case Right(updated) => Right(updated)
-            case Left(e) => Left(ErrorResponse(s"Couldn't create the user due to an error: ${e.getMessage}"))
-          }
-
-      case Left(err) => IO.pure(Left(err))
-    }
-
-
-def nextScenario(professorEmail: String, sessionId: String, studentName: String): IO[Either[ErrorResponse, ScenarioView]] =
-  getSession(professorEmail, sessionId)
-    .flatMap {
-      case Right(res) =>
-        res.students.find(_.userName == studentName) match
-          case Some(aStudent) =>
-            aStudent.currentScenario match
-              case Some(scenario) => IO.pure(Right(ScenarioView("test", scenario.template.title, scenario.template.narrative)))
-              case None =>
-                val template = ScenarioTemplate("test", "test", "test")
-                val scenario = ScenarioState(template, 0)
-                val updatedStudent = aStudent.copy(currentScenario = Some(scenario))
-                val newStudents = updatedStudent :: res.students.filter(_.userName != aStudent.userName)
-                val updatedSession = res.copy(students = newStudents)
-
-                DataBaseService.updateSession(professorEmail, updatedSession)
-                  .map(_.map(_ => ScenarioView("testId", template.title, template.narrative)))
-                  .map {
-                    case Right(updated) => Right(updated)
-                    case Left(e) => Left(ErrorResponse(s"Couldn't create the user due to an error: ${e.getMessage}"))
-                  }
-
-          case None => IO.pure(Left(ErrorResponse("Couldn't find user")))
-      case Left(err) => IO.pure(Left(err))
+        val roster = res.students.map { student =>
+          StudentRosterEntry(
+            studentName = student.userName,
+            wealth = student.stats.wealth,
+            health = student.stats.health,
+            happiness = student.stats.happiness,
+            currentScenarioTitle = student.currentScenario.map(_.template.title),
+            completedScenarioCount = student.completedScenarios.length
+          )
+        }
+        Right(SessionRosterResponse(roster))
+      case Left(err) => Left(err)
     }
 
 def getAnalytics(professorEmail: String, sessionId: String): IO[Either[ErrorResponse, AnalyticsSummary]] =

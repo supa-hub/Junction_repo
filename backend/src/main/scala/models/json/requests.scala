@@ -84,6 +84,7 @@ final case class StudentHabits(
 ) derives ReadWriter
 
 final case class StudentUser(
+  studentId: String = "",
   userName: String,
   currentScenario: Option[ScenarioState],
   completedScenarios: List[String],

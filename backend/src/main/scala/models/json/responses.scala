@@ -67,6 +67,17 @@ final case class ScenarioView(
 
 final case class SessionStarted(sessionId: String, status: String, startedAt: String)
 
+final case class StudentRosterEntry(
+  studentName: String,
+  wealth: models.Number,
+  health: models.Number,
+  happiness: models.Number,
+  currentScenarioTitle: Option[String],
+  completedScenarioCount: Int
+)
+
+final case class SessionRosterResponse(students: List[StudentRosterEntry])
+
 /**
  * I use this to serialize the data into a json format which will be returned as a response
  * for the request.
@@ -102,6 +113,8 @@ package circecoders:
   given studentInsightsEncoder: Encoder[StudentInsights] = deriveEncoder
   given sessionStartedEncoder: Encoder[SessionStarted] = deriveEncoder
   given scenarioViewEncoder: Encoder[ScenarioView] = deriveEncoder
+  given studentRosterEntryEncoder: Encoder[StudentRosterEntry] = deriveEncoder
+  given sessionRosterEncoder: Encoder[SessionRosterResponse] = deriveEncoder
 end circecoders
 
 package http4sentities:
@@ -127,4 +140,6 @@ package http4sentities:
   given studentInsightsEntity: EntityEncoder[IO, StudentInsights] = jsonEncoderOf
   given sessionStartedEntity: EntityEncoder[IO, SessionStarted] = jsonEncoderOf
   given scenarioViewEntity: EntityEncoder[IO, ScenarioView] = jsonEncoderOf
+  given studentRosterEntryEntity: EntityEncoder[IO, StudentRosterEntry] = jsonEncoderOf
+  given sessionRosterEntity: EntityEncoder[IO, SessionRosterResponse] = jsonEncoderOf
 end http4sentities
