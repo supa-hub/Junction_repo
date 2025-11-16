@@ -12,12 +12,15 @@ import cats.effect.std.Console
 import services.DataBaseService
 import scala.concurrent.duration.*
 import scala.util.Properties
+import org.http4s.headers.Origin
 
 
 object Main extends IOApp:
   override def run(args: List[String]): IO[ExitCode] =
     val port = Properties.envOrElse("PORT", "80").toInt
     val services = AllRoutes.withSlashRoute
+
+    val allowedOriginValue = Properties.envOrElse("FRONTEND_ORIGIN", "http://localhost:5173")
 
     val allowedHeaders = Set(
       CIString("Content-Type"),
@@ -37,7 +40,8 @@ object Main extends IOApp:
 
     val corsPolicy = CORS
       .policy
-      .withAllowOriginAll
+      .withAllowOriginHeader(origin => origin.value == allowedOriginValue)
+      .withAllowCredentials(true)
       .withAllowHeadersIn(allowedHeaders)
       .withAllowMethodsIn(allowedMethods)
       .withMaxAge(1.day)
