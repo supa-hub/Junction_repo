@@ -24,9 +24,8 @@ import models.json.http4sentities.given
 import models.json.http4sencoders.given
 import org.http4s.*
 import org.http4s.dsl.io.*
-import org.http4s.headers.Cookie
+import org.http4s.headers.Authorization
 import org.http4s.server.AuthMiddleware
-import org.typelevel.ci.CIString
 import services.{DataBaseService, GameSimulationService, JWTService}
 import models.implicitconversions.given
 
@@ -60,10 +59,12 @@ object JsonRoutes:
   val authUser: Kleisli[IO, Request[IO], Either[String, ProfessorUser]] = Kleisli(req =>
     val jwtClaim = req
       .headers
-      .get[Cookie]
-      .toRight("Cookie parsing error")
-      .flatMap(_.values.toList.find(_.name == "authcookie").toRight("Couldn't find the authcookie"))
-      .flatMap(cookie => JWTService.decode(cookie.content).toEither.leftMap(_.getMessage))
+      .get[Authorization]
+      .toRight("Authorization parsing error")
+      .flatMap {
+        case Authorization(BasicCredentials(creds)) => JWTService.decode(creds._2).toEither.leftMap(_.getMessage)
+        case _ => Left("Couldn't decode auth header")
+      }
       .toEitherT[IO]
 
     jwtClaim
@@ -87,12 +88,6 @@ object JsonRoutes:
   private val onFailure: AuthedRoutes[String, IO] = Kleisli(req => OptionT.liftF(Forbidden(req.context)))
   private val authMiddleware: AuthMiddleware[IO, ProfessorUser] = AuthMiddleware(authUser, onFailure)
 
-  /*
-  private def handleServiceEither[T](result: Either[GameSimulationService.ServiceError, T], successStatus: Status = Status.Ok)(using EntityEncoder[IO, T]): IO[Response[IO]] =
-    result match
-      case Right(value) => Response[IO](status = successStatus).withEntity(value).pure[IO]
-      case Left(err) => Response[IO](status = err.status).withEntity(ErrorResponse(err.message)).pure[IO]
-  */
   val route = HttpRoutes.of[IO] {
     case req @ POST -> Root / "api" / "newSessionData" =>
       req
